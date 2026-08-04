@@ -1,0 +1,9 @@
+node_modules
+dist
+release
+*.ps1
+*.vsix
+.DS_Store
+.claude
+.vscode/settings.json
+QUESTION.md
