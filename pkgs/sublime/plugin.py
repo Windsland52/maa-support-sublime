@@ -20,6 +20,7 @@ SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
 NODE_VERSION_REQUIREMENT = ">=20.19.0"
 INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
+STATUS_KEY = "maa_framework_project"
 _known_maa_workspaces: set[Path] = set()
 
 
@@ -149,6 +150,55 @@ def _interface_values(interface: dict[str, Any], field: str) -> list[str]:
     ]
 
 
+def _project_for_file(file: Path) -> Optional[Path]:
+    for parent in file.resolve().parents:
+        if any((parent / name).is_file() for name in INTERFACE_FILES):
+            return parent
+    return None
+
+
+def _project_status(file: Path) -> Optional[str]:
+    project = _project_for_file(file)
+    if project is None:
+        return None
+    interface_file = next(
+        (project / name for name in sorted(INTERFACE_FILES) if (project / name).is_file()),
+        None,
+    )
+    interface = _load_json_object(interface_file) if interface_file else {}
+    interface = interface or {}
+    config = _load_json_object(project / "config" / "maa_pi_config.json") or {}
+    project_name = interface.get("name")
+    if not isinstance(project_name, str) or not project_name:
+        project_name = project.name
+    resource_names = _interface_values(interface, "resource")
+    resource = config.get("resource")
+    if not isinstance(resource, str) or resource not in resource_names:
+        resource = resource_names[0] if resource_names else "unconfigured"
+    parts = [f"MaaFramework: {project_name}", f"resource: {resource}"]
+    for key, label in (("controller", "controller"), ("__locale", "locale")):
+        value = config.get(key)
+        if isinstance(value, str) and value:
+            parts.append(f"{label}: {value}")
+    return " · ".join(parts)
+
+
+def _update_view_status(view) -> None:
+    file_name = view.file_name()
+    status = _project_status(Path(file_name)) if file_name else None
+    if status:
+        view.set_status(STATUS_KEY, status)
+    else:
+        view.erase_status(STATUS_KEY)
+
+
+def _refresh_window_statuses(window) -> None:
+    if not window or not hasattr(window, "views"):
+        return
+    for view in window.views():
+        _update_view_status(view)
+
+
 class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
     config_key = ""
     interface_field = ""
@@ -196,6 +246,7 @@ class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
         except OSError as error:
             sublime.status_message(f"MaaFramework: cannot update selection: {error}")
             return
+        _refresh_window_statuses(self.window)
         sublime.status_message(f"MaaFramework: selected {self.item_name} {value}")
 
 
@@ -215,6 +266,21 @@ class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelectCommand):
     config_key = "__locale"
     interface_field = "languages"
     item_name = "locale"
+
+
+class MaaFrameworkProjectStatusListener(sublime_plugin.EventListener):
+    def on_load_async(self, view) -> None:
+        _update_view_status(view)
+
+    def on_activated_async(self, view) -> None:
+        _update_view_status(view)
+
+    def on_post_save_async(self, view) -> None:
+        window = view.window()
+        if window:
+            _refresh_window_statuses(window)
+        else:
+            _update_view_status(view)
 
 
 class LspMaaFrameworkPlugin(LspPlugin):

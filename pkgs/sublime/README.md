@@ -86,6 +86,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 命令会扫描所有 workspace folder 中的 interface，并在候选项中显示项目相对目录。选中后写入该项目的 `config/maa_pi_config.json`，同时保留文件中已有的其他配置字段。
 
+打开项目内文件时，状态栏会显示所属 interface 项目、当前 resource，以及已配置的 controller 和 locale。切换或保存文件后自动刷新。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

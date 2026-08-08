@@ -51,11 +51,35 @@ class FakeWindowCommand:
         self.window = window
 
 
+class FakeEventListener:
+    pass
+
+
+class FakeView:
+    def __init__(self, file_name, window=None):
+        self._file_name = file_name
+        self._window = window
+        self.statuses = {}
+
+    def file_name(self):
+        return self._file_name
+
+    def window(self):
+        return self._window
+
+    def set_status(self, key, value):
+        self.statuses[key] = value
+
+    def erase_status(self, key):
+        self.statuses.pop(key, None)
+
+
 class FakeWindow:
     def __init__(self, folders):
         self._folders = folders
         self.labels = []
         self.on_done = None
+        self._views = []
 
     def folders(self):
         return self._folders
@@ -63,6 +87,9 @@ class FakeWindow:
     def show_quick_panel(self, labels, on_done):
         self.labels = labels
         self.on_done = on_done
+
+    def views(self):
+        return self._views
 
 
 class FakeSublime(types.ModuleType):
@@ -100,6 +127,7 @@ class PluginTests(unittest.TestCase):
         lsp_utils.NodeManager = FakeNodeManager
         sublime_plugin = types.ModuleType("sublime_plugin")
         sublime_plugin.WindowCommand = FakeWindowCommand
+        sublime_plugin.EventListener = FakeEventListener
         sys.modules["sublime"] = self.sublime
         sys.modules["sublime_plugin"] = sublime_plugin
         sys.modules["LSP"] = lsp
@@ -268,6 +296,43 @@ class PluginTests(unittest.TestCase):
             f"MaaFramework: cannot update invalid config {config_file}",
             self.sublime.messages,
         )
+
+    def test_shows_active_project_and_resource_in_view_status(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text("{}", encoding="utf-8")
+        (project / "interface.json").write_text(
+            """
+            {
+                "name": "Demo Project",
+                "resource": [
+                    { "name": "Default" },
+                    { "name": "Extra" }
+                ]
+            }
+            """,
+            encoding="utf-8",
+        )
+        config = project / "config" / "maa_pi_config.json"
+        config.parent.mkdir()
+        config.write_text(
+            '{"resource":"Extra","controller":"Adb","__locale":"Chinese"}',
+            encoding="utf-8",
+        )
+        view = FakeView(str(pipeline))
+
+        self.plugin.MaaFrameworkProjectStatusListener().on_activated_async(view)
+
+        self.assertEqual(
+            view.statuses[self.plugin.STATUS_KEY],
+            "MaaFramework: Demo Project · resource: Extra · controller: Adb · locale: Chinese",
+        )
+
+        generic = FakeView(str(Path(self.temp.name, "generic.json")))
+        generic.statuses[self.plugin.STATUS_KEY] = "stale"
+        self.plugin.MaaFrameworkProjectStatusListener().on_load_async(generic)
+        self.assertNotIn(self.plugin.STATUS_KEY, generic.statuses)
 
 
 if __name__ == "__main__":
