@@ -84,6 +84,18 @@
     "command": "maa_framework_crop_screenshot"
   },
   {
+    "caption": "MaaFramework: Test OCR",
+    "command": "maa_framework_test_ocr"
+  },
+  {
+    "caption": "MaaFramework: Test Template Match",
+    "command": "maa_framework_test_template_match"
+  },
+  {
+    "caption": "MaaFramework: Test Pipeline Recognition",
+    "command": "maa_framework_test_pipeline_recognition"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

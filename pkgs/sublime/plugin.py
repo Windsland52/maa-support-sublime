@@ -163,6 +163,48 @@ class MaaRuntimeManager:
     def crop(self, window, rect: list[int]) -> None:
         self._request_image(window, "cropScreenshot", {"rect": rect}, "crop")
 
+    def test_ocr(self, window) -> None:
+        self._request_recognition(window, "testOcr", {}, "OCR Test")
+
+    def test_template_match(self, window, template: Path) -> None:
+        try:
+            if template.suffix.lower() != ".png" or not template.is_file():
+                raise RuntimeError("template must be an existing PNG file")
+            encoded = base64.b64encode(template.read_bytes()).decode("ascii")
+            self._request_recognition(
+                window,
+                "testTemplateMatch",
+                {"template": f"data:image/png;base64,{encoded}"},
+                "Template Match Test",
+            )
+        except Exception as error:
+            sublime.status_message(f"MaaFramework: cannot read template: {error}")
+
+    def test_pipeline_recognition(self, window, task: str) -> None:
+        self._request_recognition(
+            window,
+            "testPipelineRecognition",
+            {"task": task},
+            f"Pipeline Recognition: {task}",
+        )
+
+    def _request_recognition(
+        self, window, method: str, params: dict[str, Any], title: str
+    ) -> None:
+        if not self.process or self.process.poll() is not None:
+            sublime.status_message("MaaFramework: runtime is not running")
+            return
+        self.request(
+            method,
+            params,
+            lambda result: _show_report(
+                window,
+                f"MaaFramework {title}",
+                json.dumps(result, ensure_ascii=False, indent=4) + "\n",
+                "Packages/JSON/JSON.sublime-syntax",
+            ),
+        )
+
     def _request_image(self, window, method: str, params: dict[str, Any], label: str) -> None:
         if not self.process or self.process.poll() is not None:
             sublime.status_message("MaaFramework: runtime is not running")
@@ -443,6 +485,9 @@ def _control_panel_html() -> str:
         ("Latest Detail", "maa_framework_runtime_detail"),
         ("Screenshot", "maa_framework_screenshot"),
         ("Crop", "maa_framework_crop_screenshot"),
+        ("OCR Test", "maa_framework_test_ocr"),
+        ("Template Match", "maa_framework_test_template_match"),
+        ("Pipeline Recognition", "maa_framework_test_pipeline_recognition"),
         ("Refresh", "maa_framework_browser_panel_refresh"),
     ]
     controls = " ".join(
@@ -1037,6 +1082,9 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Show Latest Recognition / Action Detail…",
             "Capture Screenshot",
             "Crop Screenshot…",
+            "Test OCR…",
+            "Test Template Match…",
+            "Test Pipeline Recognition…",
             "Manage Task Breakpoints…",
             "Select MaaFramework Version…",
             "Select npm Registry…",
@@ -1064,6 +1112,9 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_runtime_detail",
             "maa_framework_screenshot",
             "maa_framework_crop_screenshot",
+            "maa_framework_test_ocr",
+            "maa_framework_test_template_match",
+            "maa_framework_test_pipeline_recognition",
             "maa_framework_breakpoints",
             "maa_framework_select_version",
             "maa_framework_select_registry",
@@ -1171,6 +1222,43 @@ class MaaFrameworkCropScreenshotCommand(sublime_plugin.WindowCommand):
             return
         self._rect.append(parsed)
         self._ask(index + 1)
+
+
+class MaaFrameworkTestOcrCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _runtime_manager.test_ocr(self.window)
+
+
+class MaaFrameworkTestTemplateMatchCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        initial = str(project) if project else ""
+        self.window.show_input_panel(
+            "Template PNG path",
+            initial,
+            lambda value: _runtime_manager.test_template_match(
+                self.window, Path(value.strip().strip('"'))
+            ),
+            None,
+            None,
+        )
+
+
+class MaaFrameworkTestPipelineRecognitionCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        self._tasks = [name for name, _, _ in _project_tasks(project)]
+        if not self._tasks:
+            sublime.status_message("MaaFramework: no pipeline recognition tasks found")
+            return
+        self.window.show_quick_panel(self._tasks, self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if 0 <= index < len(self._tasks):
+            _runtime_manager.test_pipeline_recognition(self.window, self._tasks[index])
 
 
 class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):

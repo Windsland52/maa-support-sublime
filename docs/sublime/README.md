@@ -89,6 +89,16 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 `Capture Screenshot` 调用当前 native Controller 的 `post_screencap()`，将 PNG 写入活动项目的 `debug/screenshot/` 并用 Sublime 图片视图打开。`Crop Screenshot…` 依次输入 x、y、width、height；worker 使用 Jimp 校验截图边界并裁剪，结果写入同一目录。两个操作都要求先 Start 以建立 controller 连接，也可从控制面板或浏览器执行面板调用；F8 快捷键按已激活的全局目标窗口路由。
 
+## 识别测试
+
+三个测试命令都使用当前 Controller 截图和已加载的 MaaFramework Resource，并把 native 识别详情写入只读 JSON：
+
+- `Test OCR` 对整张截图运行 MaaFramework `OCR`，模型直接取自当前通用 resource；不复制或适配 MaaAssistantArknights 资源；
+- `Test Template Match` 输入一个本地 PNG 路径，通过临时 `override_image` 以 `TemplateMatch`、method 5、threshold 0.7 匹配；
+- `Test Pipeline Recognition` 从当前 resource 的 pipeline task 中选择节点，调用 `run_recognition` 测试其识别配置。
+
+为避免同一 Tasker 并发执行，识别测试需要等待队列进入 finished/stopped 后调用。每次测试使用唯一的临时 custom action，结果保留识别元数据及 raw/draw PNG data URL；报告本身不会把图像写入 resource。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

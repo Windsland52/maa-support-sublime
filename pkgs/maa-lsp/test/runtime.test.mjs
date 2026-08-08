@@ -122,15 +122,33 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         destroy() {}
       }
       class Resource {
+        constructor() { this.actions = new Map() }
         add_sink(sink) { this.sink = sink }
         post_bundle() { return new Operation() }
+        register_custom_action(name, action) { this.actions.set(name, action) }
+        override_image(name, image) { this.image = { name, image } }
         destroy() {}
       }
       class Tasker {
         constructor() { this.inited = true }
         add_sink(sink) { this.sink = sink }
         add_context_sink(sink) { this.contextSink = sink }
-        post_task(entry) {
+        post_task(entry, override) {
+          const custom = override?.[entry]?.custom_action
+          if (custom) {
+            const action = this.resource.actions.get(custom)
+            const gate = action({
+              context: {
+                run_recognition: async (task, image, pipeline) => ({
+                  name: task,
+                  algorithm: pipeline?.[task]?.recognition || 'Pipeline',
+                  raw: image,
+                  draws: []
+                })
+              }
+            })
+            return new Operation(true, gate)
+          }
           const gate = this.sink?.(0, { msg: 'RecognitionNode.Starting', name: entry, reco_id: 7 })
           return new Operation(true, gate)
         }
@@ -233,6 +251,16 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     assert.match(screenshot.result, /^data:image\/png;base64,/)
     const crop = await client.request('cropScreenshot', { rect: [0, 0, 1, 1] })
     assert.match(crop.result, /^data:image\/png;base64,/)
+    const ocr = await client.request('testOcr')
+    assert.equal(ocr.result.info.algorithm, 'OCR')
+    const template = await client.request('testTemplateMatch', {
+      template: screenshot.result
+    })
+    assert.equal(template.result.info.algorithm, 'TemplateMatch')
+    const pipelineRecognition = await client.request('testPipelineRecognition', {
+      task: 'Entry'
+    })
+    assert.equal(pipelineRecognition.result.info.name, 'Entry')
     assert.deepEqual((await client.request('setBreakpoints', { tasks: ['Entry'] })).result, [
       'Entry'
     ])

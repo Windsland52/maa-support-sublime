@@ -49,6 +49,7 @@ let stopped = false
 let runtimeStatus = 'idle'
 let currentTask: string | null = null
 let breakTasks = new Set<string>()
+let toolSequence = 0
 const history: Array<{ event: string; params: unknown }> = []
 const Jimp = createJimp({
   plugins: [pluginCrop.methods],
@@ -396,7 +397,7 @@ function imageDataUrl(value: Uint8Array | ArrayBuffer) {
   return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
 }
 
-async function screenshot() {
+async function screenshotImage() {
   if (!session) {
     throw new Error('MaaFramework runtime is not started')
   }
@@ -404,7 +405,11 @@ async function screenshot() {
   if (!image) {
     throw new Error('Controller did not return a screenshot')
   }
-  return imageDataUrl(image)
+  return image as Uint8Array | ArrayBuffer
+}
+
+async function screenshot() {
+  return imageDataUrl(await screenshotImage())
 }
 
 async function cropScreenshot(rect: unknown) {
@@ -422,6 +427,99 @@ async function cropScreenshot(rect: unknown) {
   }
   image.crop({ x, y, w: width, h: height })
   return imageDataUrl(await image.getBuffer('image/png'))
+}
+
+function dataUrlImage(value: unknown) {
+  if (typeof value !== 'string' || !/^data:image\/png;base64,/.test(value)) {
+    throw new Error('Template must be a PNG data URL')
+  }
+  const buffer = Buffer.from(value.slice(value.indexOf(',') + 1), 'base64')
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+}
+
+function recognitionResult(detail: any) {
+  if (!detail) {
+    return null
+  }
+  const info = { ...detail }
+  delete info.raw
+  delete info.draws
+  return {
+    info,
+    raw: detail.raw ? imageDataUrl(detail.raw) : null,
+    draws: Array.isArray(detail.draws) ? detail.draws.map(imageDataUrl) : []
+  }
+}
+
+async function runRecognition(
+  task: string,
+  image: Uint8Array | ArrayBuffer,
+  override?: Record<string, unknown>
+) {
+  if (!session) {
+    throw new Error('MaaFramework runtime is not started')
+  }
+  if (runtimeStatus === 'running' || runtimeStatus === 'paused') {
+    throw new Error('Wait for the task queue to finish before running a recognition test')
+  }
+  const action = `@sublime/recognition/${++toolSequence}`
+  let result: unknown = null
+  ;(session.resource as any).register_custom_action(action, async (self: any) => {
+    result = await self.context.run_recognition(task, image, override)
+    return true
+  })
+  const operation = await (session.tasker as any)
+    .post_task(action, {
+      [action]: {
+        action: 'Custom',
+        custom_action: action
+      }
+    })
+    .wait()
+  if (!operation.succeeded) {
+    throw new Error('MaaFramework recognition test task failed')
+  }
+  const formatted = recognitionResult(result)
+  notify('recognitionTest', { task, result: formatted?.info ?? null })
+  return formatted
+}
+
+async function testOcr(params: Record<string, unknown>) {
+  const image = await screenshotImage()
+  const decoded = await Jimp.read(Buffer.from(image as Uint8Array))
+  const roi = Array.isArray(params.roi) ? params.roi : [0, 0, decoded.width, decoded.height]
+  return runRecognition('@sublime/ocr', image, {
+    '@sublime/ocr': {
+      recognition: 'OCR',
+      roi,
+      only_rec: params.onlyRec === true
+    }
+  })
+}
+
+async function testTemplateMatch(params: Record<string, unknown>) {
+  if (!session) {
+    throw new Error('MaaFramework runtime is not started')
+  }
+  const image = await screenshotImage()
+  const templateName = `@sublime/template/${++toolSequence}`
+  ;(session.resource as any).override_image(templateName, dataUrlImage(params.template))
+  return runRecognition('@sublime/template-match', image, {
+    '@sublime/template-match': {
+      recognition: 'TemplateMatch',
+      template: templateName,
+      method: 5,
+      threshold: 0.7,
+      green_mask: false
+    }
+  })
+}
+
+async function testPipelineRecognition(params: Record<string, unknown>) {
+  if (typeof params.task !== 'string' || !params.task) {
+    throw new Error('Pipeline recognition task is required')
+  }
+  return runRecognition(params.task, await screenshotImage())
 }
 
 function recognitionDetail(id: unknown) {
@@ -499,6 +597,12 @@ async function handle(request: Request): Promise<unknown> {
       return screenshot()
     case 'cropScreenshot':
       return cropScreenshot(request.params?.rect)
+    case 'testOcr':
+      return testOcr(request.params ?? {})
+    case 'testTemplateMatch':
+      return testTemplateMatch(request.params ?? {})
+    case 'testPipelineRecognition':
+      return testPipelineRecognition(request.params ?? {})
     case 'setBreakpoints':
       breakTasks = new Set(
         Array.isArray(request.params?.tasks)

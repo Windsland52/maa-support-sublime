@@ -68,6 +68,7 @@ class FakeRuntimeManager:
         self.breakpoints = []
         self.captures = []
         self.crops = []
+        self.recognition_tests = []
         self.shutdown_count = 0
         self.state = "idle"
         self.history = []
@@ -92,6 +93,15 @@ class FakeRuntimeManager:
 
     def crop(self, window, rect):
         self.crops.append((window, rect))
+
+    def test_ocr(self, window):
+        self.recognition_tests.append(("ocr", window))
+
+    def test_template_match(self, window, template):
+        self.recognition_tests.append(("template", window, template))
+
+    def test_pipeline_recognition(self, window, task):
+        self.recognition_tests.append(("pipeline", window, task))
 
     def fetch_versions(self, callback):
         callback(["5.12.2", "5.11.0"], {"5.11.0"})
@@ -655,6 +665,9 @@ class PluginTests(unittest.TestCase):
                 "Show Latest Recognition / Action Detail…",
                 "Capture Screenshot",
                 "Crop Screenshot…",
+                "Test OCR…",
+                "Test Template Match…",
+                "Test Pipeline Recognition…",
                 "Manage Task Breakpoints…",
                 "Select MaaFramework Version…",
                 "Select npm Registry…",
@@ -668,7 +681,7 @@ class PluginTests(unittest.TestCase):
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(17)
+        window.on_done(20)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -683,7 +696,10 @@ class PluginTests(unittest.TestCase):
         pipeline = project / "resource" / "pipeline" / "main.json"
         pipeline.parent.mkdir(parents=True)
         pipeline.write_text('{"Entry":{}}', encoding="utf-8")
-        (project / "interface.json").write_text("{}", encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
         config = project / "config" / "maa_pi_config.json"
         config.parent.mkdir()
         config.write_text('{"task":[{"name":"Daily"}]}', encoding="utf-8")
@@ -702,12 +718,31 @@ class PluginTests(unittest.TestCase):
         self.plugin.MaaFrameworkScreenshotCommand(window).run()
         window.input_values = ["10", "20", "100", "80"]
         self.plugin.MaaFrameworkCropScreenshotCommand(window).run()
+        self.plugin.MaaFrameworkTestOcrCommand(window).run()
+
+        template = project / "template.png"
+        template.write_bytes(b"png")
+        window.input_values = [str(template)]
+        self.plugin.MaaFrameworkTestTemplateMatchCommand(window).run()
+
+        recognition = self.plugin.MaaFrameworkTestPipelineRecognitionCommand(window)
+        recognition.run()
+        self.assertEqual(window.labels, ["Entry"])
+        window.on_done(0)
 
         self.assertEqual(runtime.started, (project, window))
         self.assertEqual(runtime.controls, ["pause", "continue", "stop", "stopAgents"])
         self.assertEqual(runtime.shown, [("status", window), ("detail", window)])
         self.assertEqual(runtime.captures, [window])
         self.assertEqual(runtime.crops, [(window, [10, 20, 100, 80])])
+        self.assertEqual(
+            runtime.recognition_tests,
+            [
+                ("ocr", window),
+                ("template", window, template),
+                ("pipeline", window, "Entry"),
+            ],
+        )
 
     def test_toggles_project_task_breakpoints_and_syncs_runtime(self):
         project = Path(self.temp.name, "workspace", "demo")
@@ -817,6 +852,7 @@ class PluginTests(unittest.TestCase):
         self.assertIn("Runtime: <b>running</b>", window.html_sheet.content)
         self.assertIn('href="subl:maa_framework_start"', window.html_sheet.content)
         self.assertIn('href="subl:maa_framework_stop"', window.html_sheet.content)
+        self.assertIn('href="subl:maa_framework_test_ocr"', window.html_sheet.content)
         self.assertIs(self.plugin._control_sheets[window.id()], window.html_sheet)
 
 
