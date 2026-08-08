@@ -90,6 +90,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `MaaFramework: Goto Task` 列出当前 resource 中的 pipeline task，并显示定义文件和行号；选择后直接跳到任务声明。
 
+`MaaFramework: Evaluate Task` 使用 maa-lsp 中已加载的 resource layer 求值任务，并在临时 JSON 文件中展示合并结果。MaaAssistantArknights 专用 expression 求值不在本插件范围。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

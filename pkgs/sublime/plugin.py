@@ -9,8 +9,11 @@ import sublime
 import sublime_plugin
 from LSP.plugin import IsApplicableContext
 from LSP.plugin import LspPlugin
+from LSP.plugin import LspTextCommand
 from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
+from LSP.plugin import Request
+from LSP.plugin import filename_to_uri
 from lsp_utils import NodeManager
 
 SETTINGS_FILE = "LSP-MaaFramework.sublime-settings"
@@ -445,6 +448,67 @@ class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):
             return
         _, file, line = self._tasks[index]
         self.window.open_file(f"{file}:{line + 1}:1", sublime.ENCODED_POSITION)
+
+
+class MaaFrameworkEvaluateTaskCommand(LspTextCommand):
+    session_name = PACKAGE_NAME
+
+    def run(self, edit) -> None:
+        window = self.view.window()
+        project = _project_for_file(Path(self.view.file_name())) if self.view.file_name() else None
+        if not window or project is None:
+            sublime.status_message(
+                "MaaFramework: open a file in a project before evaluating a task"
+            )
+            return
+        self._tasks = _project_tasks(project)
+        if not self._tasks:
+            sublime.status_message("MaaFramework: no tasks found in the active resource")
+            return
+        window.show_quick_panel([name for name, _, _ in self._tasks], self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._tasks):
+            return
+        session = self.session_by_name(PACKAGE_NAME)
+        if session is None:
+            sublime.status_message("MaaFramework: language server is not running")
+            return
+        task = self._tasks[index][0]
+        file_name = self.view.file_name()
+        if not file_name:
+            return
+        session.send_request(
+            Request(
+                "maa/evaluateTask",
+                {"uri": filename_to_uri(file_name), "task": task},
+                self.view,
+            ),
+            lambda result: sublime.set_timeout(lambda: self._show_result(task, result)),
+            self._show_error,
+        )
+
+    @staticmethod
+    def _show_error(error: Any) -> None:
+        message = error.get("message", error) if isinstance(error, dict) else error
+        sublime.status_message(f"MaaFramework: task evaluation failed: {message}")
+
+    def _show_result(self, task: str, result: Any) -> None:
+        if result is None:
+            sublime.status_message(f"MaaFramework: cannot evaluate task {task}")
+            return
+        window = self.view.window()
+        if not window:
+            return
+        output = window.new_file()
+        output.set_name(f"MaaFramework Eval — {task}.json")
+        output.set_scratch(True)
+        output.assign_syntax("Packages/JSON/JSON.sublime-syntax")
+        output.run_command(
+            "append",
+            {"characters": json.dumps(result, ensure_ascii=False, indent=4) + "\n"},
+        )
+        output.set_read_only(True)
 
 
 class MaaFrameworkProjectStatusListener(sublime_plugin.EventListener):

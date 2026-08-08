@@ -60,4 +60,6 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Hover（任务合并结果、图片预览、locale、颜色、锚点与 interface 信息）
 - Multi-root workspace
 
-当前未实现 code action、formatting、code lens 和资源选择 UI。
+## 自定义请求
+
+`maa/evaluateTask` 接收 `{ "uri": string, "task": string }`。server 根据 URI 路由到目录层级最深的 MaaFramework 项目，刷新当前 `InterfaceBundle` 后返回 `evalTask` 的 resource layer 合并结果；任务或项目不存在时返回 `null`。该请求不实现 MaaAssistantArknights 专用的 expression 语义。

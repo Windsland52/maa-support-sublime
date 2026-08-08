@@ -42,6 +42,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 `MaaFramework: Goto Task` 从当前文件所属项目的有效 resource path 中读取 `pipeline/**/*.{json,jsonc}` 和 `default_pipeline.json`。quick panel 按任务名排序并显示来源文件与行号；同名任务按 resource path 后层覆盖前层的顺序定位，`$` 开头的内部任务不显示。选择后以 encoded position 打开声明行。
 
+`MaaFramework: Evaluate Task` 选择任务后向当前 maa-lsp 会话发送 `maa/evaluateTask` 请求。server 使用已加载、已应用 resource layering 的 `InterfaceBundle.evalTask` 求值，并把合并后的 MaaFramework task 作为只读临时 JSON 展示。MaaAssistantArknights 的 task expression 求值不属于本插件范围，因此不注册相关命令或协议。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

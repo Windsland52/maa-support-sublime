@@ -22,5 +22,9 @@
   {
     "caption": "MaaFramework: Goto Task",
     "command": "maa_framework_goto_task"
+  },
+  {
+    "caption": "MaaFramework: Evaluate Task",
+    "command": "maa_framework_evaluate_task"
   }
 ]

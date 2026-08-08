@@ -29,6 +29,31 @@ class FakeLspPlugin:
         pass
 
 
+class FakeRequest:
+    def __init__(self, method, params=None, view=None):
+        self.method = method
+        self.params = params
+        self.view = view
+
+
+class FakeLspTextCommand:
+    def __init__(self, view):
+        self.view = view
+
+    def session_by_name(self, _name):
+        return self.view.session
+
+
+class FakeSession:
+    def __init__(self, result):
+        self.result = result
+        self.request = None
+
+    def send_request(self, request, on_result, _on_error=None):
+        self.request = request
+        on_result(self.result)
+
+
 class FakeNodeRunner:
     def node_env(self):
         return {"NODE_TEST_RUNTIME": "1"}
@@ -60,6 +85,12 @@ class FakeView:
         self._file_name = file_name
         self._window = window
         self.statuses = {}
+        self.session = None
+        self.name = None
+        self.scratch = False
+        self.syntax = None
+        self.content = ""
+        self.read_only = False
 
     def file_name(self):
         return self._file_name
@@ -72,6 +103,22 @@ class FakeView:
 
     def erase_status(self, key):
         self.statuses.pop(key, None)
+
+    def set_name(self, name):
+        self.name = name
+
+    def set_scratch(self, scratch):
+        self.scratch = scratch
+
+    def assign_syntax(self, syntax):
+        self.syntax = syntax
+
+    def run_command(self, command, args):
+        if command == "append":
+            self.content += args["characters"]
+
+    def set_read_only(self, read_only):
+        self.read_only = read_only
 
 
 class FakeWindow:
@@ -98,6 +145,11 @@ class FakeWindow:
     def open_file(self, file_name, flags):
         self.opened = (file_name, flags)
 
+    def new_file(self):
+        view = FakeView(None, self)
+        self._views.append(view)
+        return view
+
 
 class FakeSublime(types.ModuleType):
     def __init__(self, cache):
@@ -119,6 +171,9 @@ class FakeSublime(types.ModuleType):
     def status_message(self, message):
         self.messages.append(message)
 
+    def set_timeout(self, callback, _delay=0):
+        callback()
+
 
 class PluginTests(unittest.TestCase):
     def setUp(self):
@@ -128,9 +183,12 @@ class PluginTests(unittest.TestCase):
         lsp = types.ModuleType("LSP")
         lsp_plugin = types.ModuleType("LSP.plugin")
         lsp_plugin.LspPlugin = FakeLspPlugin
+        lsp_plugin.LspTextCommand = FakeLspTextCommand
         lsp_plugin.IsApplicableContext = object
         lsp_plugin.OnPreStartContext = object
         lsp_plugin.PluginStartError = RuntimeError
+        lsp_plugin.Request = FakeRequest
+        lsp_plugin.filename_to_uri = lambda file: Path(file).as_uri()
         lsp_utils = types.ModuleType("lsp_utils")
         lsp_utils.NodeManager = FakeNodeManager
         sublime_plugin = types.ModuleType("sublime_plugin")
@@ -382,6 +440,37 @@ class PluginTests(unittest.TestCase):
             window.opened,
             (f"{pipeline}:9:1", self.sublime.ENCODED_POSITION),
         )
+
+    def test_evaluates_task_with_language_server_into_scratch_json(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{"timeout":1234}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(project.parent)])
+        source = FakeView(str(pipeline), window)
+        source.session = FakeSession({"timeout": 1234, "next": ["Done"]})
+        window._views.append(source)
+
+        command = self.plugin.MaaFrameworkEvaluateTaskCommand(source)
+        command.run(None)
+        self.assertEqual(window.labels, ["Entry"])
+        window.on_done(0)
+
+        self.assertEqual(source.session.request.method, "maa/evaluateTask")
+        self.assertEqual(
+            source.session.request.params,
+            {"uri": pipeline.as_uri(), "task": "Entry"},
+        )
+        output = window._views[-1]
+        self.assertEqual(output.name, "MaaFramework Eval — Entry.json")
+        self.assertTrue(output.scratch)
+        self.assertEqual(output.syntax, "Packages/JSON/JSON.sublime-syntax")
+        self.assertTrue(output.read_only)
+        self.assertEqual(json.loads(output.content), {"timeout": 1234, "next": ["Done"]})
 
 
 if __name__ == "__main__":

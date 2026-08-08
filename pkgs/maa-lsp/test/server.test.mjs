@@ -258,6 +258,60 @@ test('hover reads an unsaved pipeline document from the LSP buffer', async () =>
   }
 })
 
+test('evaluates merged MaaFramework tasks through a custom request', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-evaluate-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(
+      pipelineFile,
+      JSON.stringify({ Evaluated: { timeout: 1234, next: ['Finished'] }, Finished: {} })
+    )
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    const evaluated = await client.request('maa/evaluateTask', {
+      uri: pathToFileURL(pipelineFile).href,
+      task: 'Evaluated'
+    })
+    assert.equal(evaluated.result.timeout, 1234)
+    assert.deepEqual(evaluated.result.next, ['Finished'])
+
+    const missing = await client.request('maa/evaluateTask', {
+      uri: pathToFileURL(pipelineFile).href,
+      task: 'Missing'
+    })
+    assert.equal(missing.result, null)
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true })
+  }
+})
+
 test('loads and watches maatools.config.mts in each workspace', async () => {
   const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-config-'))
   let client

@@ -141,6 +141,11 @@ type InterfaceConfig = {
   resource?: unknown
 }
 
+type EvaluateTaskParams = {
+  task?: unknown
+  uri?: unknown
+}
+
 const connection = createConnection()
 const documents = new TextDocuments(TextDocument)
 documents.listen(connection)
@@ -1213,6 +1218,25 @@ connection.onDidChangeWatchedFiles(params => {
   ) {
     queueWorkspaceRefresh()
   }
+})
+
+connection.onRequest('maa/evaluateTask', async (params: EvaluateTaskParams) => {
+  if (typeof params.uri !== 'string' || typeof params.task !== 'string') {
+    return null
+  }
+  const file = path.resolve(URI.parse(params.uri).fsPath)
+  for (const project of projects) {
+    const relative = path.relative(project.root.dir, file)
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      continue
+    }
+    await project.bundle.flush(true)
+    if (!project.bundle.topLayer.getTaskList().includes(params.task as TaskName)) {
+      return null
+    }
+    return project.bundle.evalTask(params.task as TaskName)
+  }
+  return null
 })
 
 connection.onCompletion(async params => {
