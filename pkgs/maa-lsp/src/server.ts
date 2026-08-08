@@ -41,6 +41,8 @@ import {
   extractTaskRef,
   findDeclRef,
   isAnchorRef,
+  joinImagePath,
+  normalizeImageFolder,
   performDiagnostic
 } from '@nekosu/maa-pipeline-manager'
 
@@ -755,6 +757,15 @@ function escapedStringContent(value: string): string {
   return escaped.slice(1, -1)
 }
 
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await fs.access(target)
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function completeInterface(
   project: ProjectBundle,
   file: string,
@@ -903,6 +914,7 @@ connection.onInitialize(params => {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
       },
       definitionProvider: true,
+      documentLinkProvider: { resolveProvider: false },
       hoverProvider: true,
       inlayHintProvider: true,
       referencesProvider: true,
@@ -1255,6 +1267,73 @@ connection.onCodeAction(async params => {
     }
   }
   return actions
+})
+
+connection.onDocumentLinks(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    const layerInfo = project.bundle.locateLayer(file)
+    if (!layerInfo) {
+      continue
+    }
+    const links = []
+    for (const ref of project.bundle.info.refs) {
+      if (
+        ref.file !== file ||
+        (ref.type !== 'interface.language_path' &&
+          ref.type !== 'interface.resource_path' &&
+          ref.type !== 'interface.import_path')
+      ) {
+        continue
+      }
+      const target = path.join(project.bundle.root, ref.target)
+      if (!(await pathExists(target))) {
+        continue
+      }
+      const location = await toLocation(file, ref.location.offset, ref.location.length)
+      links.push({ range: location.range, target: URI.file(target).toString() })
+    }
+
+    const [layer, fileName] = layerInfo
+    const topLayer = project.bundle.topLayer
+    const imageFolders = topLayer.getImageFolders()
+    for (const ref of layer.mergedRefs) {
+      if (ref.file !== fileName) {
+        continue
+      }
+      const location = await toLocation(file, ref.location.offset, ref.location.length)
+      if (
+        (ref.type === 'task.can_locale' || ref.type === 'task.locale_text') &&
+        (ref.target.endsWith('.md') || ref.target.endsWith('.png'))
+      ) {
+        const target = path.join(topLayer.root, ref.target)
+        if (await pathExists(target)) {
+          links.push({ range: location.range, target: URI.file(target).toString() })
+        }
+        continue
+      }
+      if (ref.type !== 'task.template' && ref.type !== 'task.custom_template') {
+        continue
+      }
+      if (ref.target.endsWith('.png')) {
+        const match = topLayer.getImage(ref.target)[0]
+        if (match) {
+          links.push({ range: location.range, target: URI.file(match[1]).toString() })
+        }
+      } else {
+        const normalized = normalizeImageFolder(ref.target)
+        const imageLayer = imageFolders.get(normalized)?.[0]
+        if (imageLayer) {
+          const target = joinImagePath(false, imageLayer.root, normalized)
+          links.push({ range: location.range, target: URI.file(target).toString() })
+        }
+      }
+    }
+    return links
+  }
+  return null
 })
 
 connection.onDefinition(async params => {

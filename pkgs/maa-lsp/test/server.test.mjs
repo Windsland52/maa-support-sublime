@@ -149,6 +149,9 @@ test('standalone server discovers recursive projects in every workspace', async 
       '$'
     ])
     assert.equal(initialized.result.capabilities.definitionProvider, true)
+    assert.deepEqual(initialized.result.capabilities.documentLinkProvider, {
+      resolveProvider: false
+    })
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.inlayHintProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
@@ -792,6 +795,79 @@ test('provides task documentation and locale inlay hints', async () => {
       }
     })
     assert.deepEqual(hints.result.map(hint => hint.label).sort(), ['Hello', 'Helpful task'])
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('links interface resource paths and pipeline template images', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-links-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const resourceDir = path.join(workspace, 'resource')
+    const pipelineDir = path.join(resourceDir, 'pipeline')
+    const imageDir = path.join(resourceDir, 'image', 'folder')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    const interfaceFile = path.join(workspace, 'interface.json')
+    const imageFile = path.join(imageDir, 'image.png')
+    await mkdir(pipelineDir, { recursive: true })
+    await mkdir(imageDir, { recursive: true })
+    await writeFile(
+      interfaceFile,
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] }, null, 2)
+    )
+    await writeFile(
+      pipelineFile,
+      JSON.stringify(
+        {
+          ImageTask: {
+            recognition: {
+              type: 'TemplateMatch',
+              param: { template: 'folder/image.png' }
+            }
+          }
+        },
+        null,
+        2
+      )
+    )
+    await writeFile(imageFile, '')
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    const interfaceLinks = await client.request('textDocument/documentLink', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href }
+    })
+    assert.deepEqual(
+      interfaceLinks.result.map(link => path.normalize(fileURLToPath(link.target)).toLowerCase()),
+      [path.normalize(resourceDir).toLowerCase()]
+    )
+    const pipelineLinks = await client.request('textDocument/documentLink', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href }
+    })
+    assert.deepEqual(
+      pipelineLinks.result.map(link => path.normalize(fileURLToPath(link.target)).toLowerCase()),
+      [path.normalize(imageFile).toLowerCase()]
+    )
 
     await client.shutdown()
     client = undefined
