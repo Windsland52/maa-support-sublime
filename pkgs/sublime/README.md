@@ -24,13 +24,13 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 ### Package Control
 
-正式收录到 Package Control 默认 channel 前，可以先添加本项目的软件源：
+本包属于 LSP helper，按 Package Control 官方规则通过 `sublimelsp/repository` 收录到默认 channel。合并前可以先添加本项目的软件源：
 
 1. 执行 `Package Control: Add Repository`；
 2. 输入 `https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json`；
 3. 执行 `Package Control: Install Package` 并选择 `LSP-MaaFramework`。
 
-默认 channel 收录后将不再需要第 1、2 步。
+默认 channel 收录后将不再需要第 1、2 步，直接执行 `Package Control: Install Package` 并搜索 `LSP-MaaFramework`。
 
 从 `MaaLSP` 0.1.x 升级时，先通过 `Package Control: Remove Package` 删除旧包，再安装 `LSP-MaaFramework`，避免两个 helper 同时启动。
 
@@ -120,11 +120,14 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 ## 功能
 
-| LSP 能力         | 说明                                                           |
-| ---------------- | -------------------------------------------------------------- |
-| Diagnostics      | interface / pipeline 校验，支持未保存内容                      |
-| Go to Definition | 在 task / target / anchor / ROI / locale 引用上跳转声明        |
-| Hover            | task 定义片段与 merged JSON 预览，支持未保存内容               |
-| Multi-root       | 多 workspace、多 interface 项目同时加载，并按文件路由 LSP 请求 |
+| LSP 能力                        | 说明                                                            |
+| ------------------------------- | --------------------------------------------------------------- |
+| Diagnostics                     | interface / pipeline 校验，应用 `maatools.config.mts` override  |
+| Completion / Definition / Hover | task、anchor、图片、locale 与 interface 的补全、跳转和合并信息  |
+| References / Rename / Symbols   | 跨文件引用、重命名、Document Symbol 与 Workspace Symbol         |
+| Code Lens / Inlay Hint          | task 引用数、活动资源状态、任务文档和 locale 文本               |
+| Code Action / Formatting        | task 语法转换、图片路径修复和保留 JSONC 注释的格式化            |
+| Document Link / Color           | interface/图片/文档链接，以及 RGB/HSV 颜色预览与回写            |
+| Multi-root / unsaved buffers    | 多 workspace、多 interface 项目路由，并读取尚未保存的编辑器内容 |
 
 > ⚠️ 本文档由 AI 生成，主要用于辅助 AI 理解项目。内容可能与实际代码不同步，请注意甄别。

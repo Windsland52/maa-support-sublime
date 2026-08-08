@@ -5,14 +5,14 @@
     {
       "name": "LSP-MaaFramework",
       "details": "https://github.com/Windsland52/maa-support-sublime",
-      "description": "MaaFramework pipeline diagnostics, navigation and hover support for Sublime Text.",
+      "description": "MaaFramework pipeline language support, runtime control and debugging tools for Sublime Text.",
       "author": "Windsland52",
-      "labels": ["linting", "text navigation"],
+      "labels": ["lsp", "linting", "code navigation", "utilities"],
       "releases": [
         {
-          "version": "0.2.0",
-          "url": "https://github.com/Windsland52/maa-support-sublime/releases/download/v0.2.0/LSP-MaaFramework.sublime-package",
-          "date": "2026-08-08 19:53:12",
+          "version": "0.3.0",
+          "url": "https://github.com/Windsland52/maa-support-sublime/releases/download/v0.3.0/LSP-MaaFramework.sublime-package",
+          "date": "2026-08-08 15:27:04",
           "sublime_text": ">=4000",
           "platforms": ["*"]
         }

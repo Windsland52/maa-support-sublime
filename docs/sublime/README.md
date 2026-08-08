@@ -126,4 +126,4 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 - CI 解压最终安装包并使用官方 `st-package-reviewer --fail-on-warnings` 审核，warning 或 failure 均阻止合并；
 - 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `LSP-MaaFramework.sublime-package`；
 - 根目录 `repository.json` 使用 schema 3 和显式 GitHub Release 下载地址，兼容 Package Control 3.4.1，允许用户在正式收录前通过 `Add Repository` 安装；
-- Package Control 默认 channel 条目需在首个 Release 建立后另行提交。
+- 本包按官方 LSP helper 路由提交到 `sublimelsp/repository`；该 repository 已由 Package Control 默认 channel 引用。提交使用 GitHub Release 中经过 reviewer 审核的 `.sublime-package`，无需把 monorepo 根目录当作插件根目录。
