@@ -38,7 +38,7 @@
 ## 语言服务
 
 - [x] Completion
-- [ ] References
+- [x] References
 - [ ] Workspace Symbol
 - [ ] Code Lens
 - [ ] Inlay Hint

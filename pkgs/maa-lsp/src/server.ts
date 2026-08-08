@@ -27,6 +27,9 @@ import {
   type AnchorName,
   type IContentWatcherController,
   InterfaceBundle,
+  type InterfaceDeclInfo,
+  type InterfaceInfo,
+  type InterfaceRefInfo,
   type TaskDeclInfo,
   type TaskName,
   type TaskRefInfo,
@@ -457,6 +460,178 @@ function makeDecls(
   return []
 }
 
+function makeRefs(
+  _decls: TaskDeclInfo[],
+  refs: TaskRefInfo[],
+  decl: TaskDeclInfo | null,
+  ref: TaskRefInfo | null
+): TaskRefInfo[] {
+  const findTask = (task: TaskName) =>
+    refs.filter(candidate => {
+      if (
+        candidate.type === 'task.anchor' ||
+        candidate.type === 'task.reco' ||
+        candidate.type === 'task.color_filter' ||
+        candidate.type === 'task.custom_task' ||
+        candidate.type === 'task.entry'
+      ) {
+        return candidate.target === task
+      }
+      if (candidate.type === 'task.next' || candidate.type === 'task.target') {
+        return candidate.target === task && !candidate.attrs.attrs.Anchor
+      }
+      if (candidate.type === 'task.roi' && !candidate.attrs.attrs.Anchor) {
+        const previous = candidate.prev.some(
+          previousDecl => previousDecl.value === candidate.target
+        )
+        return !previous && candidate.target === task
+      }
+      return false
+    })
+
+  if (decl) {
+    if (decl.type === 'task.decl') {
+      return findTask(decl.task)
+    }
+    if (decl.type === 'task.anchor') {
+      return refs.filter(candidate => isAnchorRef(candidate) && candidate.target === decl.anchor)
+    }
+    if (decl.type === 'task.sub_reco') {
+      return refs.filter(
+        candidate =>
+          candidate.type === 'task.roi' &&
+          candidate.target === decl.name &&
+          candidate.task === decl.task
+      )
+    }
+    if (decl.type === 'task.locale') {
+      return refs.filter(
+        candidate => candidate.type === 'task.locale' && candidate.target === decl.key
+      )
+    }
+  } else if (ref) {
+    const task = extractTaskRef(ref)
+    if (task) {
+      return findTask(task)
+    }
+    if (isAnchorRef(ref)) {
+      return refs.filter(candidate => isAnchorRef(candidate) && candidate.target === ref.target)
+    }
+    if (ref.type === 'task.roi') {
+      return refs.filter(
+        candidate =>
+          candidate.type === 'task.roi' &&
+          candidate.target === ref.target &&
+          candidate.task === ref.task
+      )
+    }
+    if (ref.type === 'task.locale') {
+      return refs.filter(
+        candidate => candidate.type === 'task.locale' && candidate.target === ref.target
+      )
+    }
+  }
+  return []
+}
+
+function makeInterfaceDecls(
+  index: InterfaceInfo,
+  decl: InterfaceDeclInfo | null,
+  ref: InterfaceRefInfo | null
+): InterfaceDeclInfo[] {
+  if (decl) {
+    if (
+      decl.type === 'interface.controller' ||
+      decl.type === 'interface.resource' ||
+      decl.type === 'interface.group' ||
+      decl.type === 'interface.task' ||
+      decl.type === 'interface.option'
+    ) {
+      return index.decls.filter(
+        candidate => candidate.type === decl.type && candidate.name === decl.name
+      )
+    }
+    if (decl.type === 'interface.case' || decl.type === 'interface.input') {
+      return index.decls.filter(
+        candidate =>
+          candidate.type === decl.type &&
+          candidate.name === decl.name &&
+          candidate.option === decl.option
+      )
+    }
+  } else if (ref) {
+    if (
+      ref.type === 'interface.controller' ||
+      ref.type === 'interface.resource' ||
+      ref.type === 'interface.group' ||
+      ref.type === 'interface.task' ||
+      ref.type === 'interface.option'
+    ) {
+      return index.decls.filter(
+        candidate => candidate.type === ref.type && candidate.name === ref.target
+      )
+    }
+    if (ref.type === 'interface.case' || ref.type === 'interface.input') {
+      return index.decls.filter(
+        candidate =>
+          candidate.type === ref.type &&
+          candidate.name === ref.target &&
+          candidate.option === ref.option
+      )
+    }
+  }
+  return []
+}
+
+function makeInterfaceRefs(
+  index: InterfaceInfo,
+  decl: InterfaceDeclInfo | null,
+  ref: InterfaceRefInfo | null
+): InterfaceRefInfo[] {
+  if (decl) {
+    if (
+      decl.type === 'interface.controller' ||
+      decl.type === 'interface.resource' ||
+      decl.type === 'interface.group' ||
+      decl.type === 'interface.task' ||
+      decl.type === 'interface.option'
+    ) {
+      return index.refs.filter(
+        candidate => candidate.type === decl.type && candidate.target === decl.name
+      )
+    }
+    if (decl.type === 'interface.case' || decl.type === 'interface.input') {
+      return index.refs.filter(
+        candidate =>
+          candidate.type === decl.type &&
+          candidate.target === decl.name &&
+          candidate.option === decl.option
+      )
+    }
+  } else if (ref) {
+    if (
+      ref.type === 'interface.controller' ||
+      ref.type === 'interface.resource' ||
+      ref.type === 'interface.group' ||
+      ref.type === 'interface.task' ||
+      ref.type === 'interface.option'
+    ) {
+      return index.refs.filter(
+        candidate => candidate.type === ref.type && candidate.target === ref.target
+      )
+    }
+    if (ref.type === 'interface.case' || ref.type === 'interface.input') {
+      return index.refs.filter(
+        candidate =>
+          candidate.type === ref.type &&
+          candidate.target === ref.target &&
+          candidate.option === ref.option
+      )
+    }
+  }
+  return []
+}
+
 async function toLocation(file: string, offset: number, length: number): Promise<Location> {
   const [sl, sc] = await resolver.resolve(file, offset)
   const [el, ec] = await resolver.resolve(file, offset + length)
@@ -728,6 +903,7 @@ connection.onInitialize(params => {
       },
       definitionProvider: true,
       hoverProvider: true,
+      referencesProvider: true,
       workspace: {
         workspaceFolders: {
           supported: true,
@@ -780,6 +956,63 @@ connection.onCompletion(async params => {
   return (
     (await completeInterface(ctx.project, ctx.file, ctx.offset)) ??
     (await completePipeline(ctx.project, ctx.file, ctx.offset))
+  )
+})
+
+connection.onReferences(async params => {
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.position.line,
+    params.position.character
+  )
+  if (!ctx) {
+    return null
+  }
+
+  const index = ctx.project.bundle.info
+  const interfaceDecl = findDeclRef(
+    index.decls.filter(candidate => candidate.file === ctx.file),
+    ctx.offset
+  )
+  const interfaceRef = findDeclRef(
+    index.refs.filter(candidate => candidate.file === ctx.file),
+    ctx.offset
+  )
+  const interfaceDecls = makeInterfaceDecls(index, interfaceDecl, interfaceRef)
+  const interfaceRefs = makeInterfaceRefs(index, interfaceDecl, interfaceRef)
+  if (interfaceDecls.length > 0 || interfaceRefs.length > 0) {
+    const matches = params.context.includeDeclaration
+      ? [...interfaceDecls, ...interfaceRefs]
+      : interfaceRefs
+    return Promise.all(
+      matches.map(match => toLocation(match.file, match.location.offset, match.location.length))
+    )
+  }
+
+  const layerInfo = ctx.project.bundle.locateLayer(ctx.file as AbsolutePath)
+  if (!layerInfo) {
+    return null
+  }
+  const [layer, fileName, isDefault] = layerInfo
+  const decls = layer.mergedDecls.filter(candidate => candidate.file === fileName)
+  const refs = layer.mergedRefs.filter(candidate => candidate.file === fileName)
+  const decl = findDeclRef(decls, ctx.offset)
+  const ref = findDeclRef(refs, ctx.offset)
+  if (isDefault && decl?.type === 'task.decl') {
+    return null
+  }
+  const allDecls = ctx.project.bundle.topLayer.mergedAllDecls
+  const allRefs = ctx.project.bundle.topLayer.mergedAllRefs
+  const matchedDecls = makeDecls(allDecls, allRefs, decl, ref)
+  const matchedRefs = makeRefs(allDecls, allRefs, decl, ref)
+  if (matchedDecls.length === 0 && matchedRefs.length === 0) {
+    return null
+  }
+  const matches = params.context.includeDeclaration
+    ? [...matchedDecls, ...matchedRefs]
+    : matchedRefs
+  return Promise.all(
+    matches.map(match => toLocation(match.file, match.location.offset, match.location.length))
   )
 })
 

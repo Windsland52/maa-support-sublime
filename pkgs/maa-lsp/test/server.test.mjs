@@ -155,6 +155,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     ])
     assert.equal(initialized.result.capabilities.definitionProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
+    assert.equal(initialized.result.capabilities.referencesProvider, true)
 
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
     const loaded = await client.waitFor(
@@ -625,7 +626,7 @@ test('completes pipeline tasks and interface references', async () => {
           {
             name: 'Default',
             path: 'resource',
-            controller: ['PartialController']
+            controller: ['Adb']
           }
         ]
       },
@@ -635,7 +636,8 @@ test('completes pipeline tasks and interface references', async () => {
     const pipelineText = JSON.stringify(
       {
         ExistingTask: {},
-        Entry: { next: ['PartialTask'] }
+        Entry: { next: ['ExistingTask'] },
+        Other: { next: ['ExistingTask'] }
       },
       null,
       2
@@ -661,7 +663,7 @@ test('completes pipeline tasks and interface references', async () => {
       textDocument: { uri: pathToFileURL(pipelineFile).href },
       position: positionAtOffset(
         pipelineText,
-        pipelineText.indexOf('PartialTask') + 'PartialTask'.length
+        pipelineText.lastIndexOf('ExistingTask') + 'ExistingTask'.length
       )
     })
     assert.deepEqual(
@@ -669,17 +671,40 @@ test('completes pipeline tasks and interface references', async () => {
         .filter(item => item.kind === 7)
         .map(item => item.label)
         .sort(),
-      ['Entry', 'ExistingTask']
+      ['Entry', 'ExistingTask', 'Other']
     )
 
     const interfaceCompletion = await client.request('textDocument/completion', {
       textDocument: { uri: pathToFileURL(interfaceFile).href },
-      position: positionAtOffset(
-        interfaceText,
-        interfaceText.indexOf('PartialController') + 'PartialController'.length
-      )
+      position: positionAtOffset(interfaceText, interfaceText.lastIndexOf('Adb') + 'Adb'.length)
     })
     assert.deepEqual(interfaceCompletion.result.map(item => item.label).sort(), ['Adb', 'Win32'])
+
+    const pipelineReferences = await client.request('textDocument/references', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: positionAtOffset(pipelineText, pipelineText.indexOf('ExistingTask') + 1),
+      context: { includeDeclaration: true }
+    })
+    assert.equal(pipelineReferences.result.length, 3)
+    const pipelineReferencesOnly = await client.request('textDocument/references', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: positionAtOffset(pipelineText, pipelineText.indexOf('ExistingTask') + 1),
+      context: { includeDeclaration: false }
+    })
+    assert.equal(pipelineReferencesOnly.result.length, 2)
+
+    const interfaceReferences = await client.request('textDocument/references', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href },
+      position: positionAtOffset(interfaceText, interfaceText.indexOf('Adb') + 1),
+      context: { includeDeclaration: true }
+    })
+    assert.equal(interfaceReferences.result.length, 2)
+    const interfaceReferencesOnly = await client.request('textDocument/references', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href },
+      position: positionAtOffset(interfaceText, interfaceText.indexOf('Adb') + 1),
+      context: { includeDeclaration: false }
+    })
+    assert.equal(interfaceReferencesOnly.result.length, 1)
 
     await client.shutdown()
     client = undefined
