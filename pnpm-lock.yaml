@@ -35,6 +35,9 @@ importers:
       '@nekosu/maa-pipeline-manager':
         specifier: ^1.0.12
         version: 1.0.12
+      jiti:
+        specifier: ^2.6.1
+        version: 2.7.0
       vscode-languageserver:
         specifier: ^9.0.0
         version: 9.0.1
@@ -484,6 +487,10 @@ packages:
 
   javascript-natural-sort@0.7.1:
     resolution: {integrity: sha512-nO6jcEfZWQXDhOiBtG2KvKyEptz7RVbpGP4vTD2hLBdmNQSsCiicO2Ioinv6UI4y9ukqnBpy+XZ9H6uLNgJTlw==}
+
+  jiti@2.7.0:
+    resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
+    hasBin: true
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -1017,6 +1024,8 @@ snapshots:
   isarray@1.0.0: {}
 
   javascript-natural-sort@0.7.1: {}
+
+  jiti@2.7.0: {}
 
   js-tokens@4.0.0: {}
 

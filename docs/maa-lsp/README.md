@@ -14,6 +14,10 @@
 
 workspace folder 增删或客户端报告 interface 文件新增/删除时会重新扫描。
 
+## maatools 配置
+
+每个 workspace 根目录的 `maatools.config.mts` 通过 `jiti` 独立加载，同一 workspace 内发现的 interface 项目共享该配置。LSP 直接监听配置文件的新增、修改和删除；变更后重建对应项目。配置的 parser 和诊断覆盖分别在后续处理阶段消费。
+
 ## 资源选择
 
 每个项目读取 interface 同级的 `config/maa_pi_config.json`：

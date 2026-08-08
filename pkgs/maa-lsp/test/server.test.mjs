@@ -208,3 +208,57 @@ test('hover reads an unsaved pipeline document from the LSP buffer', async () =>
     await rm(temp, { recursive: true, force: true })
   }
 })
+
+test('loads and watches maatools.config.mts in each workspace', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-config-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    await addInterface(workspace, '.')
+    const configFile = path.join(workspace, 'maatools.config.mts')
+    await writeFile(configFile, 'export default { marker: "first" }')
+    const loadedMessage = `maa-lsp: loaded maatools.config.mts from ${workspace}`
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    try {
+      await client.waitFor(
+        message =>
+          message.method === 'window/logMessage' &&
+          message.params.message.toLowerCase() === loadedMessage.toLowerCase()
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+
+    await writeFile(configFile, 'export default { marker: "second" }')
+    try {
+      await client.waitFor(
+        message =>
+          message.method === 'window/logMessage' &&
+          message.params.message === 'maa-lsp: reloading changed maatools.config.mts'
+      )
+      await client.waitFor(
+        message =>
+          message.method === 'window/logMessage' &&
+          message.params.message.toLowerCase() === loadedMessage.toLowerCase()
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})

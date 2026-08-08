@@ -27,7 +27,7 @@
 
 ## 配置正确性
 
-- [ ] 加载并监听 `maatools.config.mts`
+- [x] 加载并监听 `maatools.config.mts`
 - [ ] 应用 `parser.customReco` / `parser.customAction`
 - [ ] 应用 `check.override`
 - [ ] 热更新 `config/maa_pi_config.json`

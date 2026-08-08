@@ -20,6 +20,7 @@ import { URI } from 'vscode-uri'
 import {
   type AbsolutePath,
   type AnchorName,
+  type IContentWatcherController,
   InterfaceBundle,
   type TaskDeclInfo,
   type TaskName,
@@ -31,6 +32,7 @@ import {
   performDiagnostic
 } from '@nekosu/maa-pipeline-manager'
 
+import { MAATOOLS_CONFIG_FILE, type MaaToolsConfig, loadMaaToolsConfig } from './config'
 import { LspContentLoader, LspContentWatcher } from './content'
 import { type ResourceRoot, isInterfaceFile, locateResourceRoots } from './workspace'
 
@@ -113,6 +115,7 @@ class PositionResolver {
 type ProjectBundle = {
   root: ResourceRoot
   bundle: InterfaceBundle
+  config: MaaToolsConfig | null
 }
 
 type InterfaceConfig = {
@@ -131,6 +134,7 @@ const resolver = new PositionResolver(loader)
 let workspaceRoots: string[] = []
 let clientSupportsWorkspaceFolders = false
 let projects: ProjectBundle[] = []
+let configWatchers: IContentWatcherController[] = []
 let refreshQueue = Promise.resolve()
 let publishQueue = Promise.resolve()
 const publishedUris = new Set<string>()
@@ -143,6 +147,10 @@ function clearAllDiagnostics() {
 }
 
 async function teardownProjects() {
+  for (const configWatcher of configWatchers) {
+    configWatcher.stop()
+  }
+  configWatchers = []
   for (const project of projects) {
     project.bundle.stop()
   }
@@ -192,6 +200,28 @@ function queuePublishDiagnostics() {
 
 const schedulePublish = debounce(queuePublishDiagnostics, 500)
 
+function queueConfigRefresh(file: string) {
+  connection.console.info(`maa-lsp: reloading changed ${path.basename(file)}`)
+  queueWorkspaceRefresh()
+}
+
+async function watchMaaToolsConfig(file: string) {
+  let ready = false
+  const changed = () => {
+    if (ready) {
+      queueConfigRefresh(file)
+    }
+  }
+  const controller = await watcher.watch(file, true, {
+    filter: () => true,
+    fileAdded: changed,
+    fileChanged: changed,
+    fileDeleted: changed
+  })
+  ready = true
+  configWatchers.push(controller)
+}
+
 async function setupProjects(roots: string[]) {
   await teardownProjects()
 
@@ -199,6 +229,16 @@ async function setupProjects(roots: string[]) {
     connection.console.warn(`maa-lsp: cannot scan ${dir}: ${String(error)}`)
   })
   const nextProjects: ProjectBundle[] = []
+  const configs = new Map<string, MaaToolsConfig | null>()
+
+  for (const workspaceRoot of new Set(found.map(root => root.workspaceRoot))) {
+    const loaded = await loadMaaToolsConfig(workspaceRoot)
+    configs.set(workspaceRoot, loaded.config)
+    await watchMaaToolsConfig(loaded.file)
+    if (loaded.config) {
+      connection.console.info(`maa-lsp: loaded ${MAATOOLS_CONFIG_FILE} from ${workspaceRoot}`)
+    }
+  }
 
   for (const root of found) {
     const bundle = new InterfaceBundle(
@@ -209,7 +249,7 @@ async function setupProjects(roots: string[]) {
       root.interfaceFile as AbsolutePath,
       undefined
     )
-    const project = { root, bundle }
+    const project = { root, bundle, config: configs.get(root.workspaceRoot) ?? null }
     for (const event of [
       'pipelineChanged',
       'interfaceChanged',
