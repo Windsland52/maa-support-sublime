@@ -72,6 +72,10 @@
     "command": "maa_framework_activate_shortcuts"
   },
   {
+    "caption": "MaaFramework: Open Browser Execution Panel",
+    "command": "maa_framework_browser_panel"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

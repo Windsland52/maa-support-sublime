@@ -80,6 +80,10 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 这里的“全局”与相邻扩展一致，指编辑器多窗口间的目标路由；Sublime 失去系统焦点后不会安装操作系统级键盘 hook。用户可在 User keymap 覆盖按键，命令名保持稳定。
 
+## 浏览器执行面板
+
+`Open Browser Execution Panel` 创建 Sublime Text 4 minihtml sheet，显示 worker 状态与最近 50 条 IPC event。Start/Pause/Continue/Stop、状态 JSON、最新 native detail 和 Refresh 均使用 Sublime 原生 `subl:` command URL 回到 WindowCommand，再进入逐行 JSON worker IPC。面板不启动 localhost server、不执行任意 JavaScript，也不向外部浏览器暴露控制端口；runtime event 到达时自动刷新已打开的 sheet。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

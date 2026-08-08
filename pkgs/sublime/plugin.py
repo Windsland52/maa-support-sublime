@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
@@ -346,6 +347,7 @@ class MaaRuntimeManager:
                 self.latest_recognition = params["reco_id"]
             if params.get("action_id") is not None:
                 self.latest_action = params["action_id"]
+        _refresh_control_sheets()
 
     def _runtime_error(self, error: Any) -> None:
         self.state = "failed"
@@ -388,6 +390,54 @@ class MaaShortcutController:
 
 
 _shortcut_controller = MaaShortcutController()
+_control_sheets = {}
+
+
+def _control_panel_html() -> str:
+    buttons = [
+        ("Start", "maa_framework_start"),
+        ("Pause", "maa_framework_pause"),
+        ("Continue", "maa_framework_continue"),
+        ("Stop", "maa_framework_stop"),
+        ("Status JSON", "maa_framework_runtime_status"),
+        ("Latest Detail", "maa_framework_runtime_detail"),
+        ("Refresh", "maa_framework_browser_panel_refresh"),
+    ]
+    controls = " ".join(
+        f'<a class="button" href="{sublime.command_url(command)}">{label}</a>'
+        for label, command in buttons
+    )
+    event_text = html.escape(
+        json.dumps(_runtime_manager.history[-50:], ensure_ascii=False, indent=2)
+    )
+    return f"""
+    <body id="maa-framework-panel">
+      <style>
+        body {{ padding: 1rem; }}
+        h1 {{ margin: 0 0 0.75rem 0; }}
+        .state {{ font-size: 1.15rem; margin-bottom: 1rem; }}
+        .button {{ display: inline-block; padding: 0.35rem 0.65rem; margin: 0 0.3rem 0.4rem 0; border-radius: 0.25rem; background-color: color(var(--foreground) alpha(0.12)); }}
+        pre {{ padding: 0.75rem; white-space: pre-wrap; background-color: color(var(--foreground) alpha(0.06)); }}
+      </style>
+      <h1>MaaFramework Control</h1>
+      <div class="state">Runtime: <b>{html.escape(_runtime_manager.state)}</b></div>
+      <div>{controls}</div>
+      <h2>Recent IPC events</h2>
+      <pre>{event_text}</pre>
+    </body>
+    """
+
+
+def _refresh_control_sheets() -> None:
+    content = _control_panel_html()
+    stale = []
+    for window_id, sheet in _control_sheets.items():
+        try:
+            sheet.set_contents(content)
+        except Exception:
+            stale.append(window_id)
+    for window_id in stale:
+        _control_sheets.pop(window_id, None)
 
 
 def _maa_version_key(version: str):
@@ -950,6 +1000,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Toggle Native Debug Mode",
             "Toggle Recognition Drawing",
             "Activate Global Shortcut Target",
+            "Open Browser Execution Panel…",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -974,6 +1025,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_toggle_debug",
             "maa_framework_toggle_save_draw",
             "maa_framework_activate_shortcuts",
+            "maa_framework_browser_panel",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -1169,6 +1221,17 @@ class MaaFrameworkToggleSaveDrawCommand(_MaaFrameworkModeToggle, sublime_plugin.
 class MaaFrameworkActivateShortcutsCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         _shortcut_controller.activate(self.window)
+
+
+class MaaFrameworkBrowserPanelCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        sheet = self.window.new_html_sheet("MaaFramework Control", _control_panel_html())
+        _control_sheets[self.window.id()] = sheet
+
+
+class MaaFrameworkBrowserPanelRefreshCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _refresh_control_sheets()
 
 
 class MaaFrameworkShortcutStartCommand(sublime_plugin.WindowCommand):

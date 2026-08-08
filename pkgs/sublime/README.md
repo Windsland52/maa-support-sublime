@@ -114,6 +114,8 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 `Activate Global Shortcut Target` 后，可从任意 Sublime window 使用 `Ctrl+Alt+Shift+F5/F6/F7` 启动、切换暂停和停止目标任务。
 
+`Open Browser Execution Panel` 使用内置 minihtml sheet 显示实时 IPC event，并通过安全的 `subl:` command URL 控制 worker；不开放 localhost 控制端口。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

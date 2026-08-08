@@ -68,6 +68,7 @@ class FakeRuntimeManager:
         self.breakpoints = []
         self.shutdown_count = 0
         self.state = "idle"
+        self.history = []
 
     def start(self, project, window):
         self.started = (project, window)
@@ -165,7 +166,18 @@ class FakeView:
         self.read_only = read_only
 
 
+class FakeHtmlSheet:
+    def __init__(self, name, content):
+        self.name = name
+        self.content = content
+
+    def set_contents(self, content):
+        self.content = content
+
+
 class FakeWindow:
+    next_id = 1
+
     def __init__(self, folders):
         self._folders = folders
         self.labels = []
@@ -173,6 +185,9 @@ class FakeWindow:
         self._views = []
         self.opened = None
         self.ran_command = None
+        self.html_sheet = None
+        self._id = FakeWindow.next_id
+        FakeWindow.next_id += 1
 
     def folders(self):
         return self._folders
@@ -197,6 +212,13 @@ class FakeWindow:
 
     def run_command(self, command, args=None):
         self.ran_command = (command, args)
+
+    def id(self):
+        return self._id
+
+    def new_html_sheet(self, name, content):
+        self.html_sheet = FakeHtmlSheet(name, content)
+        return self.html_sheet
 
 
 class FakeSublime(types.ModuleType):
@@ -233,6 +255,9 @@ class FakeSublime(types.ModuleType):
 
     def save_settings(self, _name):
         pass
+
+    def command_url(self, command, _args=None):
+        return f"subl:{command}"
 
 
 class PluginTests(unittest.TestCase):
@@ -623,12 +648,13 @@ class PluginTests(unittest.TestCase):
                 "Toggle Native Debug Mode",
                 "Toggle Recognition Drawing",
                 "Activate Global Shortcut Target",
+                "Open Browser Execution Panel…",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(14)
+        window.on_done(15)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -756,6 +782,21 @@ class PluginTests(unittest.TestCase):
 
         self.assertEqual(target.ran_command, ("maa_framework_start", None))
         self.assertEqual(runtime.controls, ["continue", "stop"])
+
+    def test_opens_browser_execution_panel_with_sublime_ipc_links(self):
+        window = FakeWindow([self.temp.name])
+        runtime = FakeRuntimeManager()
+        runtime.state = "running"
+        self.plugin._runtime_manager = runtime
+        self.plugin._control_sheets.clear()
+
+        self.plugin.MaaFrameworkBrowserPanelCommand(window).run()
+
+        self.assertEqual(window.html_sheet.name, "MaaFramework Control")
+        self.assertIn("Runtime: <b>running</b>", window.html_sheet.content)
+        self.assertIn('href="subl:maa_framework_start"', window.html_sheet.content)
+        self.assertIn('href="subl:maa_framework_stop"', window.html_sheet.content)
+        self.assertIs(self.plugin._control_sheets[window.id()], window.html_sheet)
 
 
 if __name__ == "__main__":
