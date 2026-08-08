@@ -23,7 +23,7 @@
 - [x] 添加设置入口和设置 schema
 - [x] 仅在 Maa 项目中启动 LSP
 - [x] 完成 Package Control reviewer 检查
-- [ ] 提交 Package Control 默认 channel
+- [x] 提交 Package Control 默认 channel（[`sublimelsp/repository#169`](https://github.com/sublimelsp/repository/pull/169)）
 
 ## 配置正确性
 

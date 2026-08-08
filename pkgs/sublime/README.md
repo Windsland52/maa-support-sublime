@@ -24,7 +24,7 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 ### Package Control
 
-本包属于 LSP helper，按 Package Control 官方规则通过 `sublimelsp/repository` 收录到默认 channel。合并前可以先添加本项目的软件源：
+本包属于 LSP helper，已按 Package Control 官方规则向 `sublimelsp/repository` 提交[默认 channel 收录 PR](https://github.com/sublimelsp/repository/pull/169)，机器人检查全部通过。PR 合并前可以先添加本项目的软件源：
 
 1. 执行 `Package Control: Add Repository`；
 2. 输入 `https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json`；
