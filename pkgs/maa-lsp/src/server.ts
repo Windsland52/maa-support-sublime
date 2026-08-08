@@ -193,6 +193,14 @@ async function selectConfiguredResource(project: ProjectBundle) {
   await project.bundle.switchActive(config.controller, resource)
 }
 
+async function isMaaAssistantArknights(workspaceRoot: string): Promise<boolean> {
+  try {
+    return (await fs.stat(path.join(workspaceRoot, 'src', 'MaaCore'))).isDirectory()
+  } catch {
+    return false
+  }
+}
+
 function queuePublishDiagnostics() {
   publishQueue = publishQueue.then(publishDiagnostics).catch(error => {
     connection.console.error(`maa-lsp: diagnostics failed: ${String(error)}`)
@@ -261,10 +269,12 @@ async function setupProjects(roots: string[]) {
   })
   const nextProjects: ProjectBundle[] = []
   const configs = new Map<string, MaaToolsConfig | null>()
+  const maaModes = new Map<string, boolean>()
 
   for (const workspaceRoot of new Set(found.map(root => root.workspaceRoot))) {
     const loaded = await loadMaaToolsConfig(workspaceRoot)
     configs.set(workspaceRoot, loaded.config)
+    maaModes.set(workspaceRoot, await isMaaAssistantArknights(workspaceRoot))
     await watchMaaToolsConfig(loaded.file)
     if (loaded.config) {
       connection.console.info(`maa-lsp: loaded ${MAATOOLS_CONFIG_FILE} from ${workspaceRoot}`)
@@ -276,7 +286,7 @@ async function setupProjects(roots: string[]) {
     const bundle = new InterfaceBundle(
       loader,
       watcher,
-      false,
+      maaModes.get(root.workspaceRoot) ?? false,
       root.dir as AbsolutePath,
       root.interfaceFile as AbsolutePath,
       config?.parser

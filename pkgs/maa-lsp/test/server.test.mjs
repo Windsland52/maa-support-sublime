@@ -492,3 +492,47 @@ test('hot reloads resource selection from config/maa_pi_config.json', async () =
     await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 })
+
+test('uses tasks and template directories in MaaAssistantArknights workspaces', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-maa-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'tasks')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    await mkdir(path.join(workspace, 'src', 'MaaCore'), { recursive: true })
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(pipelineFile, JSON.stringify({ MaaTask: { next: ['Stop'] } }, null, 2))
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+    const hover = await client.request('textDocument/hover', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: { line: 1, character: 5 }
+    })
+    assert.match(hover.result.contents.value, /MaaTask/)
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
