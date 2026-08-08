@@ -241,15 +241,16 @@ async function setupProjects(roots: string[]) {
   }
 
   for (const root of found) {
+    const config = configs.get(root.workspaceRoot) ?? null
     const bundle = new InterfaceBundle(
       loader,
       watcher,
       false,
       root.dir as AbsolutePath,
       root.interfaceFile as AbsolutePath,
-      undefined
+      config?.parser
     )
-    const project = { root, bundle, config: configs.get(root.workspaceRoot) ?? null }
+    const project = { root, bundle, config }
     for (const event of [
       'pipelineChanged',
       'interfaceChanged',

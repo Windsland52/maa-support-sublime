@@ -262,3 +262,93 @@ test('loads and watches maatools.config.mts in each workspace', async () => {
     await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 })
+
+test('applies custom recognition and action parsers from maatools.config.mts', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-parser-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(
+      path.join(workspace, 'maatools.config.mts'),
+      `export default {
+        parser: {
+          customReco(name, param, utils) {
+            if (name !== 'LinkReco') return []
+            return utils.parseObject(param)
+              .filter(([key, node]) => key === 'node' && utils.isString(node))
+              .map(([, node]) => ({ node, type: 'taskRef', missingPolicy: 'error' }))
+          },
+          customAction(name, param, utils) {
+            if (name !== 'LinkAction') return []
+            return utils.parseObject(param)
+              .filter(([key, node]) => key === 'node' && utils.isString(node))
+              .map(([, node]) => ({ node, type: 'taskRef', missingPolicy: 'error' }))
+          }
+        }
+      }`
+    )
+    await writeFile(
+      pipelineFile,
+      JSON.stringify(
+        {
+          Entry: {
+            recognition: {
+              type: 'Custom',
+              param: {
+                custom_recognition: 'LinkReco',
+                custom_recognition_param: { node: 'MissingReco' }
+              }
+            },
+            action: {
+              type: 'Custom',
+              param: {
+                custom_action: 'LinkAction',
+                custom_action_param: { node: 'MissingAction' }
+              }
+            }
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    let diagnostics
+    try {
+      diagnostics = await client.waitFor(
+        message =>
+          message.method === 'textDocument/publishDiagnostics' &&
+          message.params.diagnostics.length >= 2
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+    assert.deepEqual(diagnostics.params.diagnostics.map(diagnostic => diagnostic.message).sort(), [
+      '未知任务 MissingAction',
+      '未知任务 MissingReco'
+    ])
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
