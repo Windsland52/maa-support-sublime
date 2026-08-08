@@ -120,6 +120,7 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 ## 自动化
 
+- 根目录 Python 开发环境由 uv 管理；`.python-version` 选择 Python 3.13，`uv.lock` 锁定 Ruff 与 `st-package-reviewer`。CI/Release 使用 `astral-sh/setup-uv` 和 `uv run --frozen`，不执行裸 `pip install`；安装包内 `.python-version` 仍是 Sublime plugin host 所需的 3.8；
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试和安装包构建；
 - `pnpm test:sublime-ui` 将 Sublime Text 安装目录复制为临时 portable 实例，复用真实 LSP/lsp_utils 依赖，安装本次生成的 `.sublime-package`，并由 Python 3.8 plugin host 自动打开 fixture。测试验证 Maa 项目标记、状态栏、控制 minihtml sheet、日志分析 sheet 和环境 PASS 报告，随后退出实例并清理临时目录；它不会读写用户的 Packages/Installed Packages；
 - CI 解压最终安装包并使用官方 `st-package-reviewer --fail-on-warnings` 审核，warning 或 failure 均阻止合并；

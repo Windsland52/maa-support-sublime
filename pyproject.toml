@@ -1,0 +1,23 @@
+[project]
+name = "maa-support-sublime-python"
+version = "0.0.0"
+description = "Python development tooling for maa-support-sublime"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "ruff==0.16.2",
+  "st-package-reviewer==0.3.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py38"
+line-length = 100
+extend-exclude = ["build", "release"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

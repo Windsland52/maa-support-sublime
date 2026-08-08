@@ -28,10 +28,13 @@ Sublime Text 插件 + maa-lsp，面向 MaaFramework pipeline 开发。
 
 ```bash
 pnpm install
+uv sync --frozen
 pnpm lint
 pnpm test
 pnpm package:sublime
 ```
+
+项目 Python 开发工具由 uv 管理：根目录 `.python-version` 固定开发环境 Python 3.13，`uv.lock` 锁定 Ruff 与 Package Control reviewer；`pnpm lint` / `pnpm test` 会通过 `uv run --frozen` 调用它们。Sublime 安装包内的 `.python-version` 独立固定为 3.8，这是编辑器 plugin host 约束，不属于 uv 虚拟环境。
 
 安装包输出到 `release/LSP-MaaFramework.sublime-package`。开发态安装和用户安装方式见 [`pkgs/sublime/README.md`](pkgs/sublime/README.md)。
 

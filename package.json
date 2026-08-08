@@ -4,8 +4,10 @@
   "packageManager": "pnpm@10.31.0",
   "scripts": {
     "build": "pnpm -r --if-present build",
-    "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test && node --test test/*.test.mjs && python -B -m unittest pkgs/sublime/test_plugin.py",
+    "lint": "pnpm -r --if-present lint && pnpm python:lint",
+    "python:lint": "uv run --frozen ruff check pkgs/sublime scripts/sublime_ui_runner.py",
+    "python:format": "uv run --frozen ruff format pkgs/sublime scripts/sublime_ui_runner.py",
+    "test": "pnpm -r --if-present test && node --test test/*.test.mjs && uv run --frozen python -B -m unittest pkgs/sublime/test_plugin.py",
     "test:sublime-ui": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/test-sublime-ui.ps1",
     "package:sublime": "pnpm build && node scripts/build-package.mjs",
     "release:sublime": "pnpm test && node scripts/build-package.mjs"
