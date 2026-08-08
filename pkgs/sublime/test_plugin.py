@@ -609,12 +609,15 @@ class PluginTests(unittest.TestCase):
                 "Manage Task Breakpoints…",
                 "Select MaaFramework Version…",
                 "Select npm Registry…",
+                "Toggle Administrator Mode",
+                "Toggle Native Debug Mode",
+                "Toggle Recognition Drawing",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(10)
+        window.on_done(13)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -712,6 +715,20 @@ class PluginTests(unittest.TestCase):
             filtered,
             ["5.12.2", "5.12.2-beta.10", "5.12.2-beta.2"],
         )
+
+    def test_toggles_admin_debug_and_recognition_drawing_modes(self):
+        window = FakeWindow([self.temp.name])
+        runtime = FakeRuntimeManager()
+        self.plugin._runtime_manager = runtime
+
+        self.plugin.MaaFrameworkToggleAdminCommand(window).run()
+        self.plugin.MaaFrameworkToggleDebugCommand(window).run()
+        self.plugin.MaaFrameworkToggleSaveDrawCommand(window).run()
+
+        self.assertTrue(self.sublime.settings.get("admin_mode"))
+        self.assertFalse(self.sublime.settings.get("debug_mode"))
+        self.assertTrue(self.sublime.settings.get("save_draw"))
+        self.assertEqual(runtime.shutdown_count, 3)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,11 @@
                   "default": true,
                   "markdownDescription": "Enable MaaFramework native debug logging for runtime sessions."
                 },
+                "admin_mode": {
+                  "type": "boolean",
+                  "default": false,
+                  "markdownDescription": "Require an elevated Sublime Text process before starting the MaaFramework worker on Windows."
+                },
                 "save_draw": {
                   "type": "boolean",
                   "default": false,

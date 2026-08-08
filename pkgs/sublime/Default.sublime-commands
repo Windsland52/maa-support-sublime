@@ -56,6 +56,18 @@
     "command": "maa_framework_select_registry"
   },
   {
+    "caption": "MaaFramework: Toggle Administrator Mode",
+    "command": "maa_framework_toggle_admin"
+  },
+  {
+    "caption": "MaaFramework: Toggle Native Debug Mode",
+    "command": "maa_framework_toggle_debug"
+  },
+  {
+    "caption": "MaaFramework: Toggle Recognition Drawing",
+    "command": "maa_framework_toggle_save_draw"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

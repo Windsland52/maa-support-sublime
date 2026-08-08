@@ -65,6 +65,12 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`、启动子进程并通过 MaaFramework Client 绑定当前 Resource/Controller/Tasker。Agent stdout/stderr 与生命周期进入 runtime history；`agent_timeout` 控制连接等待。`Stop Agent Processes` 可独立 destroy Client 并终止子进程，Stop/Shutdown 也保证回收。VS Code `launch.json` debug-session 映射没有跨编辑器语义，因此不实现。
 
+三个模式命令都会先关闭旧 worker，使下一次 Start 使用新设置：
+
+- `Toggle Native Debug Mode` 映射 `maa.Global.debug_mode`；
+- `Toggle Recognition Drawing` 映射 `maa.Global.save_draw`，绘图写入项目 debug log 目录；
+- `Toggle Administrator Mode` 在 Windows 要求当前 Sublime 进程已经提升权限。插件不绕过 UAC 或静默自提权；未提升时 Start 会拒绝并提示通过“以管理员身份运行”重启 Sublime。非 Windows 平台不施加该检查。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

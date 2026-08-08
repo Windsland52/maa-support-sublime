@@ -53,12 +53,16 @@ class MaaRuntimeManager:
     def start(self, project: Path, window) -> None:
         self.window = window
         try:
+            settings = sublime.load_settings(SETTINGS_FILE)
+            if settings.get("admin_mode", False) and os.name == "nt" and not _is_admin():
+                raise RuntimeError(
+                    "admin mode requires restarting Sublime Text with Run as administrator"
+                )
             node, module_path = self._prepare_native()
             runtime = LspMaaFrameworkPlugin._resolve_runtime_path()
             if runtime is None:
                 raise RuntimeError("bundled runtime.mjs not found")
             self._ensure_process(node, runtime)
-            settings = sublime.load_settings(SETTINGS_FILE)
             log_dir = project / "debug"
             log_dir.mkdir(parents=True, exist_ok=True)
             self.request(
@@ -371,6 +375,17 @@ def _maa_version_key(version: str):
         for part in (prerelease.split(".") if prerelease else [])
     )
     return (*base, 1 if prerelease is None else 0, prerelease_key)
+
+
+def _is_admin() -> bool:
+    if os.name != "nt":
+        return os.geteuid() == 0 if hasattr(os, "geteuid") else False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
 
 
 def _is_ignored_directory(name: str) -> bool:
@@ -901,6 +916,9 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Manage Task Breakpoints…",
             "Select MaaFramework Version…",
             "Select npm Registry…",
+            "Toggle Administrator Mode",
+            "Toggle Native Debug Mode",
+            "Toggle Recognition Drawing",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -921,6 +939,9 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_breakpoints",
             "maa_framework_select_version",
             "maa_framework_select_registry",
+            "maa_framework_toggle_admin",
+            "maa_framework_toggle_debug",
+            "maa_framework_toggle_save_draw",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -1076,6 +1097,41 @@ class MaaFrameworkSelectRegistryCommand(sublime_plugin.WindowCommand):
         settings.set("npm_registry", registry)
         sublime.save_settings(SETTINGS_FILE)
         sublime.status_message(f"MaaFramework: selected {name} registry {registry}")
+
+
+class _MaaFrameworkModeToggle:
+    setting = ""
+    label = "mode"
+    default = False
+
+    def run(self) -> None:
+        settings = sublime.load_settings(SETTINGS_FILE)
+        enabled = not bool(settings.get(self.setting, self.default))
+        _runtime_manager.shutdown()
+        settings.set(self.setting, enabled)
+        sublime.save_settings(SETTINGS_FILE)
+        suffix = " (restart Sublime as administrator before starting)" if (
+            self.setting == "admin_mode" and enabled and os.name == "nt" and not _is_admin()
+        ) else ""
+        sublime.status_message(
+            f"MaaFramework: {self.label} {'enabled' if enabled else 'disabled'}{suffix}"
+        )
+
+
+class MaaFrameworkToggleAdminCommand(_MaaFrameworkModeToggle, sublime_plugin.WindowCommand):
+    setting = "admin_mode"
+    label = "administrator mode"
+
+
+class MaaFrameworkToggleDebugCommand(_MaaFrameworkModeToggle, sublime_plugin.WindowCommand):
+    setting = "debug_mode"
+    label = "native debug mode"
+    default = True
+
+
+class MaaFrameworkToggleSaveDrawCommand(_MaaFrameworkModeToggle, sublime_plugin.WindowCommand):
+    setting = "save_draw"
+    label = "recognition drawing"
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):

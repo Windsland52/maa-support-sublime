@@ -110,6 +110,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 interface Agent 由 worker 作为子进程启动并绑定 native Client；输出与状态进入 runtime history，`Stop Agent Processes` 或 Stop/Shutdown 会统一回收。
 
+管理员、native debug 和 recognition drawing 均可从控制面板切换。Windows 管理员模式要求以管理员身份运行 Sublime；插件不会绕过 UAC 自动提权。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |
