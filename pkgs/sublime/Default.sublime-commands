@@ -26,5 +26,9 @@
   {
     "caption": "MaaFramework: Evaluate Task",
     "command": "maa_framework_evaluate_task"
+  },
+  {
+    "caption": "MaaFramework: Reload Projects and Config",
+    "command": "maa_framework_reload"
   }
 ]

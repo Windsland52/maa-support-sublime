@@ -304,6 +304,9 @@ test('evaluates merged MaaFramework tasks through a custom request', async () =>
     })
     assert.equal(missing.result, null)
 
+    const reloaded = await client.request('maa/reloadProjects', {})
+    assert.deepEqual(reloaded.result, { projects: 1 })
+
     await client.shutdown()
     client = undefined
   } finally {

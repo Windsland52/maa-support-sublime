@@ -511,6 +511,34 @@ class MaaFrameworkEvaluateTaskCommand(LspTextCommand):
         output.set_read_only(True)
 
 
+class MaaFrameworkReloadCommand(LspTextCommand):
+    session_name = PACKAGE_NAME
+
+    def run(self, edit) -> None:
+        session = self.session_by_name(PACKAGE_NAME)
+        if session is None:
+            sublime.status_message("MaaFramework: language server is not running")
+            return
+        session.send_request(
+            Request("maa/reloadProjects", {}, self.view),
+            self._on_reloaded,
+            self._show_error,
+        )
+
+    def _on_reloaded(self, result: Any) -> None:
+        window = self.view.window()
+        sublime.set_timeout(lambda: _refresh_window_statuses(window))
+        count = result.get("projects", 0) if isinstance(result, dict) else 0
+        sublime.status_message(
+            f"MaaFramework: reloaded {count} interface project{'s' if count != 1 else ''}"
+        )
+
+    @staticmethod
+    def _show_error(error: Any) -> None:
+        message = error.get("message", error) if isinstance(error, dict) else error
+        sublime.status_message(f"MaaFramework: project reload failed: {message}")
+
+
 class MaaFrameworkProjectStatusListener(sublime_plugin.EventListener):
     def on_load_async(self, view) -> None:
         _update_view_status(view)

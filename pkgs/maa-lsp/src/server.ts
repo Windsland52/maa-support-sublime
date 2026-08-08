@@ -346,13 +346,17 @@ async function setupProjects(roots: string[]) {
   queuePublishDiagnostics()
 }
 
-function queueWorkspaceRefresh() {
+function requestWorkspaceRefresh(): Promise<void> {
   const roots = [...workspaceRoots]
-  refreshQueue = refreshQueue
-    .then(() => setupProjects(roots))
-    .catch(error => {
-      connection.console.error(`maa-lsp: workspace refresh failed: ${String(error)}`)
-    })
+  const operation = refreshQueue.then(() => setupProjects(roots))
+  refreshQueue = operation.catch(error => {
+    connection.console.error(`maa-lsp: workspace refresh failed: ${String(error)}`)
+  })
+  return operation
+}
+
+function queueWorkspaceRefresh() {
+  void requestWorkspaceRefresh()
 }
 
 function workspaceRootsFromInitialize(params: InitializeParams): string[] {
@@ -1237,6 +1241,11 @@ connection.onRequest('maa/evaluateTask', async (params: EvaluateTaskParams) => {
     return project.bundle.evalTask(params.task as TaskName)
   }
   return null
+})
+
+connection.onRequest('maa/reloadProjects', async () => {
+  await requestWorkspaceRefresh()
+  return { projects: projects.length }
 })
 
 connection.onCompletion(async params => {

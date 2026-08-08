@@ -63,3 +63,5 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 ## 自定义请求
 
 `maa/evaluateTask` 接收 `{ "uri": string, "task": string }`。server 根据 URI 路由到目录层级最深的 MaaFramework 项目，刷新当前 `InterfaceBundle` 后返回 `evalTask` 的 resource layer 合并结果；任务或项目不存在时返回 `null`。该请求不实现 MaaAssistantArknights 专用的 expression 语义。
+
+`maa/reloadProjects` 无参数，串行等待已有刷新后重新扫描所有 workspace folder，并重建 interface bundle、`maatools.config.mts` 和 `maa_pi_config.json` 监听；成功后返回 `{ "projects": number }`。

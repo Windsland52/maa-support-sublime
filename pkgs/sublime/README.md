@@ -92,6 +92,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `MaaFramework: Evaluate Task` 使用 maa-lsp 中已加载的 resource layer 求值任务，并在临时 JSON 文件中展示合并结果。MaaAssistantArknights 专用 expression 求值不在本插件范围。
 
+`MaaFramework: Reload Projects and Config` 主动重扫 workspace，并重新加载 interface、`maatools.config.mts` 与项目选择配置。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

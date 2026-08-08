@@ -472,6 +472,22 @@ class PluginTests(unittest.TestCase):
         self.assertTrue(output.read_only)
         self.assertEqual(json.loads(output.content), {"timeout": 1234, "next": ["Done"]})
 
+    def test_manually_reloads_projects_and_config(self):
+        window = FakeWindow([self.temp.name])
+        source = FakeView(str(Path(self.temp.name, "interface.json")), window)
+        source.session = FakeSession({"projects": 2})
+        window._views.append(source)
+
+        command = self.plugin.MaaFrameworkReloadCommand(source)
+        command.run(None)
+
+        self.assertEqual(source.session.request.method, "maa/reloadProjects")
+        self.assertEqual(source.session.request.params, {})
+        self.assertIn(
+            "MaaFramework: reloaded 2 interface projects",
+            self.sublime.messages,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
