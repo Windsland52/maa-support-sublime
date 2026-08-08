@@ -191,9 +191,7 @@ class MaaRuntimeManager:
             f"Pipeline Recognition: {task}",
         )
 
-    def _request_recognition(
-        self, window, method: str, params: dict[str, Any], title: str
-    ) -> None:
+    def _request_recognition(self, window, method: str, params: dict[str, Any], title: str) -> None:
         if not self.process or self.process.poll() is not None:
             sublime.status_message("MaaFramework: runtime is not running")
             return
@@ -227,7 +225,7 @@ class MaaRuntimeManager:
             root = (
                 self.project / "debug" / "screenshot"
                 if self.project is not None
-                else Path(sublime.cache_path()) / PACKAGE_NAME / "screenshot"
+                else LspMaaFrameworkPlugin.plugin_storage_path / "screenshot"
             )
             root.mkdir(parents=True, exist_ok=True)
             target = root / f"{label}-{uuid.uuid4().hex[:12]}.png"
@@ -296,12 +294,12 @@ class MaaRuntimeManager:
                 if isinstance(version, str) and _maa_version_key(version) is not None
             ]
             versions.sort(key=lambda version: _maa_version_key(version) or (), reverse=True)
-            installed_root = Path(sublime.cache_path()) / PACKAGE_NAME / "native"
-            installed = {
-                directory.name
-                for directory in installed_root.iterdir()
-                if directory.is_dir()
-            } if installed_root.is_dir() else set()
+            installed_root = LspMaaFrameworkPlugin.plugin_storage_path / "native"
+            installed = (
+                {directory.name for directory in installed_root.iterdir() if directory.is_dir()}
+                if installed_root.is_dir()
+                else set()
+            )
             sublime.set_timeout(lambda: callback(versions, installed))
         except Exception as error:
             sublime.set_timeout(
@@ -321,7 +319,7 @@ class MaaRuntimeManager:
         if not isinstance(registry, str) or not registry.startswith(("https://", "http://")):
             raise RuntimeError(f"invalid npm registry {registry!r}")
         node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
-        install = Path(sublime.cache_path()) / PACKAGE_NAME / "native" / version
+        install = LspMaaFrameworkPlugin.plugin_storage_path / "native" / version
         module_path = install / "node_modules"
         native_entry = module_path / "@maaxyz" / "maa-node" / "dist" / "index-client.js"
         if not native_entry.is_file():
@@ -387,18 +385,16 @@ class MaaRuntimeManager:
             if isinstance(message, dict) and isinstance(message.get("id"), int):
                 callback = self._callbacks.pop(message["id"], None)
                 if "error" in message:
-                    sublime.set_timeout(
-                        lambda error=message["error"]: self._runtime_error(error)
-                    )
+                    sublime.set_timeout(lambda error=message["error"]: self._runtime_error(error))
                 elif callback:
                     sublime.set_timeout(
                         lambda result=message.get("result"), done=callback: done(result)
                     )
             elif isinstance(message, dict) and isinstance(message.get("event"), str):
                 sublime.set_timeout(
-                    lambda event=message["event"], params=message.get(
-                        "params"
-                    ): self._event(event, params)
+                    lambda event=message["event"], params=message.get("params"): self._event(
+                        event, params
+                    )
                 )
         sublime.set_timeout(self._ended)
 
@@ -509,15 +505,8 @@ class MaaLogAnalyzerManager:
         if not isinstance(registry, str) or not registry.startswith(("https://", "http://")):
             raise RuntimeError(f"invalid npm registry {registry!r}")
         node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
-        install = Path(sublime.cache_path()) / PACKAGE_NAME / "maa-log-analyzer" / version
-        cli = (
-            install
-            / "node_modules"
-            / "@windsland52"
-            / "maa-log-tools"
-            / "dist"
-            / "cli.js"
-        )
+        install = LspMaaFrameworkPlugin.plugin_storage_path / "maa-log-analyzer" / version
+        cli = install / "node_modules" / "@windsland52" / "maa-log-tools" / "dist" / "cli.js"
         if not cli.is_file():
             install.mkdir(parents=True, exist_ok=True)
             command = [str(part) for part in node.npm_command()]
@@ -590,9 +579,7 @@ class MaaShortcutController:
         if command == "start":
             window.run_command("maa_framework_start")
         elif command == "toggle-pause":
-            _runtime_manager.control(
-                "continue" if _runtime_manager.state == "paused" else "pause"
-            )
+            _runtime_manager.control("continue" if _runtime_manager.state == "paused" else "pause")
         elif command == "stop":
             _runtime_manager.control("stop")
         elif command == "screenshot":
@@ -728,14 +715,18 @@ def _log_analysis_html(analysis: dict[str, Any], selected: str) -> str:
         visible.append(line)
     visible = visible[-300:]
     count_html = " ".join(
-        f'<span class="count {level.lower()}">{level}: {counts[level]}</span>'
-        for level in counts
+        f'<span class="count {level.lower()}">{level}: {counts[level]}</span>' for level in counts
     )
-    event_html = "".join(
-        f"<tr><td>{html.escape(name)}</td><td>{count}</td></tr>"
-        for name, count in analysis["events"]
-    ) or '<tr><td colspan="2">No Maa event records in the analyzed range.</td></tr>'
-    truncation = "Only the latest 8 MiB is analyzed." if analysis["truncated"] else "Full file analyzed."
+    event_html = (
+        "".join(
+            f"<tr><td>{html.escape(name)}</td><td>{count}</td></tr>"
+            for name, count in analysis["events"]
+        )
+        or '<tr><td colspan="2">No Maa event records in the analyzed range.</td></tr>'
+    )
+    truncation = (
+        "Only the latest 8 MiB is analyzed." if analysis["truncated"] else "Full file analyzed."
+    )
     return f"""
     <body id="maa-log-analysis">
       <style>
@@ -819,7 +810,9 @@ def _workspace_has_interface(root: Path) -> bool:
 
 
 def _file_has_interface_ancestor(file: Path) -> bool:
-    return any(any((parent / name).is_file() for name in INTERFACE_FILES) for parent in file.parents)
+    return any(
+        any((parent / name).is_file() for name in INTERFACE_FILES) for parent in file.parents
+    )
 
 
 def _strip_jsonc(text: str) -> str:
@@ -1106,11 +1099,7 @@ def _pipeline_files(project: Path) -> list[Path]:
     config = _project_config(project) or {}
     selected = config.get("resource")
     resource = next(
-        (
-            entry
-            for entry in resources
-            if isinstance(entry, dict) and entry.get("name") == selected
-        ),
+        (entry for entry in resources if isinstance(entry, dict) and entry.get("name") == selected),
         None,
     )
     if resource is None:
@@ -1195,9 +1184,7 @@ def _environment_report(window) -> str:
 
     try:
         node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
-        lines.append(
-            f"[OK] Node.js {node.resolve_version()}: {node.node_binary_path()}"
-        )
+        lines.append(f"[OK] Node.js {node.resolve_version()}: {node.node_binary_path()}")
     except Exception as error:
         lines.append(f"[FAIL] Node.js {NODE_VERSION_REQUIREMENT}: {error}")
         failed = True
@@ -1269,9 +1256,7 @@ class _MaaFrameworkSelector:
         config_file = project / "config" / "maa_pi_config.json"
         config = _project_config(project)
         if config is None:
-            sublime.status_message(
-                f"MaaFramework: cannot update invalid config {config_file}"
-            )
+            sublime.status_message(f"MaaFramework: cannot update invalid config {config_file}")
             return
         config[self.config_key] = value
         error = _write_project_config(project, config)
@@ -1553,9 +1538,9 @@ class MaaFrameworkAnalyzeLogsCommand(sublime_plugin.WindowCommand):
                 ]
                 for path in self._files
             ],
-            lambda index: self._show(self._files[index], level)
-            if 0 <= index < len(self._files)
-            else None,
+            lambda index: (
+                self._show(self._files[index], level) if 0 <= index < len(self._files) else None
+            ),
         )
 
     def _show(self, file: Path, level: str) -> None:
@@ -1686,9 +1671,7 @@ class MaaFrameworkSelectVersionCommand(sublime_plugin.WindowCommand):
 
 class MaaFrameworkSelectRegistryCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
-        current = sublime.load_settings(SETTINGS_FILE).get(
-            "npm_registry", NPM_REGISTRIES["npm"]
-        )
+        current = sublime.load_settings(SETTINGS_FILE).get("npm_registry", NPM_REGISTRIES["npm"])
         self._registries = list(NPM_REGISTRIES.items())
         self.window.show_quick_panel(
             [
@@ -1719,9 +1702,11 @@ class _MaaFrameworkModeToggle:
         _runtime_manager.shutdown()
         settings.set(self.setting, enabled)
         sublime.save_settings(SETTINGS_FILE)
-        suffix = " (restart Sublime as administrator before starting)" if (
-            self.setting == "admin_mode" and enabled and os.name == "nt" and not _is_admin()
-        ) else ""
+        suffix = (
+            " (restart Sublime as administrator before starting)"
+            if (self.setting == "admin_mode" and enabled and os.name == "nt" and not _is_admin())
+            else ""
+        )
         sublime.status_message(
             f"MaaFramework: {self.label} {'enabled' if enabled else 'disabled'}{suffix}"
         )
@@ -1868,9 +1853,7 @@ class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         project = _active_project(self.window)
         if project is None:
-            sublime.status_message(
-                "MaaFramework: open a file in a project before choosing a task"
-            )
+            sublime.status_message("MaaFramework: open a file in a project before choosing a task")
             return
         self._tasks = _project_tasks(project)
         if not self._tasks:
@@ -2063,18 +2046,18 @@ class LspMaaFrameworkPlugin(LspPlugin):
                 return candidate.resolve()
         return cls._extract_packaged_file(RUNTIME_RESOURCE, RUNTIME_FILE)
 
-    @staticmethod
-    def _extract_packaged_server() -> Path | None:
-        return LspMaaFrameworkPlugin._extract_packaged_file(SERVER_RESOURCE, SERVER_FILE)
+    @classmethod
+    def _extract_packaged_server(cls) -> Path | None:
+        return cls._extract_packaged_file(SERVER_RESOURCE, SERVER_FILE)
 
-    @staticmethod
-    def _extract_packaged_file(resource: str, file_name: str) -> Path | None:
+    @classmethod
+    def _extract_packaged_file(cls, resource: str, file_name: str) -> Path | None:
         try:
             content = sublime.load_binary_resource(resource)
         except Exception:
             return None
 
-        target_dir = Path(sublime.cache_path()) / PACKAGE_NAME
+        target_dir = cls.plugin_storage_path
         target = target_dir / file_name
         try:
             target_dir.mkdir(parents=True, exist_ok=True)

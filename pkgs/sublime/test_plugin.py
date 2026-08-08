@@ -303,7 +303,9 @@ class FakeSublime(types.ModuleType):
 class PluginTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.sublime = FakeSublime(self.temp.name)
+        self.sublime = FakeSublime(str(Path(self.temp.name, "cache")))
+        self.plugin_storage = Path(self.temp.name, "package-storage", "LSP-MaaFramework")
+        FakeLspPlugin.plugin_storage_path = self.plugin_storage
         self.sublime.ENCODED_POSITION = 1
         lsp = types.ModuleType("LSP")
         lsp_plugin = types.ModuleType("LSP.plugin")
@@ -341,6 +343,7 @@ class PluginTests(unittest.TestCase):
 
     def test_extracts_and_refreshes_packaged_server(self):
         target = self.plugin.LspMaaFrameworkPlugin._extract_packaged_server()
+        self.assertEqual(target.parent, self.plugin_storage)
         self.assertEqual(target.read_bytes(), b"first")
 
         self.sublime.server = b"second"
