@@ -31,7 +31,7 @@
 - [x] 应用 `parser.customReco` / `parser.customAction`
 - [x] 应用 `check.override`
 - [x] 热更新 `config/maa_pi_config.json`
-- [x] 检测 MaaAssistantArknights 模式
+- [x] ~~检测 MaaAssistantArknights 模式~~（不在本插件范围）
 - [x] 报告配置加载失败
 - [x] 避免启动时重复发布诊断
 
@@ -46,7 +46,7 @@
 - [ ] Document Link
 - [ ] Document Color
 - [ ] 完整 Hover
-- [ ] MaaAssistantArknights 特殊引用、悬停和求值
+- [x] ~~MaaAssistantArknights 特殊引用、悬停和求值~~（不在本插件范围）
 - [ ] Formatting
 - [ ] Rename
 - [ ] Document Symbol

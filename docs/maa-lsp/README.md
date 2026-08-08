@@ -14,7 +14,7 @@
 
 workspace folder 增删或客户端报告 interface 文件新增/删除时会重新扫描。
 
-每个 workspace 独立检测 `src/MaaCore` 目录。存在时按 MaaAssistantArknights 布局读取资源下的 `tasks/` 与 `template/`；不存在时读取 MaaFramework 布局的 `pipeline/` 与 `image/`。该规则与相邻的 VS Code 扩展一致。
+本插件只支持 MaaFramework 项目，资源固定按 `pipeline/` 与 `image/` 布局解析；不检测或兼容 MaaAssistantArknights 的 `tasks/` 与 `template/` 布局。
 
 ## maatools 配置
 
