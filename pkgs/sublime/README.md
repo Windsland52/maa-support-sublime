@@ -106,6 +106,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `Manage Task Breakpoints` 按项目持久化 pipeline node 断点；worker 在命中的 `*.Starting` 通知处暂停，使用 Continue 或 Stop 解除。
 
+`Select MaaFramework Version` 查询、标记并切换 5.5.0 以上 native 版本；`Select npm Registry` 在 npm 与 npmmirror 源间切换。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

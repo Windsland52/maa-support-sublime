@@ -44,6 +44,14 @@
     "command": "maa_framework_breakpoints"
   },
   {
+    "caption": "MaaFramework: Select MaaFramework Version",
+    "command": "maa_framework_select_version"
+  },
+  {
+    "caption": "MaaFramework: Select npm Registry",
+    "command": "maa_framework_select_registry"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

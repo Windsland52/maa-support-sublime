@@ -27,6 +27,11 @@ SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
 RUNTIME_FILE = "runtime.mjs"
 RUNTIME_RESOURCE = f"Packages/{PACKAGE_NAME}/{RUNTIME_FILE}"
 NODE_VERSION_REQUIREMENT = ">=20.19.0"
+MINIMUM_MAA_VERSION = (5, 5, 0)
+NPM_REGISTRIES = {
+    "npm": "https://registry.npmjs.org",
+    "cnpm": "https://registry.npmmirror.com",
+}
 INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
@@ -165,6 +170,57 @@ class MaaRuntimeManager:
         except Exception:
             process.terminate()
 
+    def fetch_versions(self, callback) -> None:
+        try:
+            settings = sublime.load_settings(SETTINGS_FILE)
+            registry = settings.get("npm_registry", NPM_REGISTRIES["npm"])
+            node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
+            command = [str(part) for part in node.npm_command()]
+            command.extend(
+                [
+                    "view",
+                    "@maaxyz/maa-node",
+                    "versions",
+                    "--json",
+                    "--registry",
+                    registry,
+                ]
+            )
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env={**os.environ, **node.node_env()},
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=120,
+                check=False,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError(completed.stderr.strip() or "npm view failed")
+            value = json.loads(completed.stdout)
+            versions = value if isinstance(value, list) else [value]
+            versions = [
+                version
+                for version in versions
+                if isinstance(version, str) and _maa_version_key(version) is not None
+            ]
+            versions.sort(key=lambda version: _maa_version_key(version) or (), reverse=True)
+            installed_root = Path(sublime.cache_path()) / PACKAGE_NAME / "native"
+            installed = {
+                directory.name
+                for directory in installed_root.iterdir()
+                if directory.is_dir()
+            } if installed_root.is_dir() else set()
+            sublime.set_timeout(lambda: callback(versions, installed))
+        except Exception as error:
+            sublime.set_timeout(
+                lambda error=error: sublime.status_message(
+                    f"MaaFramework: cannot fetch native versions: {error}"
+                )
+            )
+
     def _prepare_native(self):
         settings = sublime.load_settings(SETTINGS_FILE)
         version = settings.get("maa_version", "5.12.2")
@@ -299,6 +355,21 @@ class MaaRuntimeManager:
 
 
 _runtime_manager = MaaRuntimeManager()
+
+
+def _maa_version_key(version: str):
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?", version)
+    if not match:
+        return None
+    base = tuple(int(match.group(index)) for index in range(1, 4))
+    if base < MINIMUM_MAA_VERSION:
+        return None
+    prerelease = match.group(4)
+    prerelease_key = tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in (prerelease.split(".") if prerelease else [])
+    )
+    return (*base, 1 if prerelease is None else 0, prerelease_key)
 
 
 def _is_ignored_directory(name: str) -> bool:
@@ -826,6 +897,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Show Runtime Status…",
             "Show Latest Recognition / Action Detail…",
             "Manage Task Breakpoints…",
+            "Select MaaFramework Version…",
+            "Select npm Registry…",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -843,6 +916,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_runtime_status",
             "maa_framework_runtime_detail",
             "maa_framework_breakpoints",
+            "maa_framework_select_version",
+            "maa_framework_select_registry",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -933,6 +1008,67 @@ class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
         sublime.status_message(
             f"MaaFramework: {'enabled' if enabled else 'disabled'} breakpoint {task}"
         )
+
+
+class MaaFrameworkSelectVersionCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        sublime.status_message("MaaFramework: fetching native versions…")
+        sublime.set_timeout_async(lambda: _runtime_manager.fetch_versions(self._show_versions))
+
+    def _show_versions(self, versions: list[str], installed: set[str]) -> None:
+        if not versions:
+            sublime.status_message("MaaFramework: registry returned no compatible versions")
+            return
+        self._versions = versions
+        current = sublime.load_settings(SETTINGS_FILE).get("maa_version", "5.12.2")
+        labels = []
+        for version in versions:
+            tags = []
+            if version == current:
+                tags.append("in use")
+            if version in installed:
+                tags.append("installed")
+            suffix = f" — {', '.join(tags)}" if tags else ""
+            labels.append(f"{version}{suffix}")
+        self.window.show_quick_panel(labels, self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._versions):
+            return
+        version = self._versions[index]
+        settings = sublime.load_settings(SETTINGS_FILE)
+        if settings.get("maa_version") == version:
+            return
+        _runtime_manager.shutdown()
+        settings.set("maa_version", version)
+        sublime.save_settings(SETTINGS_FILE)
+        sublime.status_message(
+            f"MaaFramework: selected {version}; it will be prepared on next start"
+        )
+
+
+class MaaFrameworkSelectRegistryCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        current = sublime.load_settings(SETTINGS_FILE).get(
+            "npm_registry", NPM_REGISTRIES["npm"]
+        )
+        self._registries = list(NPM_REGISTRIES.items())
+        self.window.show_quick_panel(
+            [
+                f"{name} — {url}{' (in use)' if url == current else ''}"
+                for name, url in self._registries
+            ],
+            self._on_done,
+        )
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._registries):
+            return
+        name, registry = self._registries[index]
+        settings = sublime.load_settings(SETTINGS_FILE)
+        settings.set("npm_registry", registry)
+        sublime.save_settings(SETTINGS_FILE)
+        sublime.status_message(f"MaaFramework: selected {name} registry {registry}")
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):

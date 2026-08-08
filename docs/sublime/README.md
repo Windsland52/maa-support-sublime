@@ -61,6 +61,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 `Manage Task Breakpoints` 列出活动 resource 的所有 pipeline task，实心圆表示已启用。断点按项目绝对路径持久化到插件 User settings，启动时传给 worker，运行中切换则通过 `setBreakpoints` 即时同步。Tasker 的任意 `*.Starting` 通知命中任务名时进入 paused，status history 同时记录 breakpoint event；Continue 或 Stop 解除闸门。
 
+`Select MaaFramework Version` 使用托管 Node 的 npm 查询 `@maaxyz/maa-node` 版本，过滤低于 5.5.0 的版本并按 semver 降序显示；当前版本和 Sublime cache 中已安装的版本带状态标记。选择新版本会关闭旧 worker，下一次 Start 时安装并加载。`Select npm Registry` 可在官方 npm 与 npmmirror/cnpm 间切换，影响版本查询和后续安装。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

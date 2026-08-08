@@ -63,6 +63,7 @@ class FakeRuntimeManager:
         self.controls = []
         self.shown = []
         self.breakpoints = []
+        self.shutdown_count = 0
 
     def start(self, project, window):
         self.started = (project, window)
@@ -78,6 +79,12 @@ class FakeRuntimeManager:
 
     def set_breakpoints(self, tasks):
         self.breakpoints.append(tasks)
+
+    def fetch_versions(self, callback):
+        callback(["5.12.2", "5.11.0"], {"5.11.0"})
+
+    def shutdown(self):
+        self.shutdown_count += 1
 
 
 class FakeNodeRunner:
@@ -599,12 +606,14 @@ class PluginTests(unittest.TestCase):
                 "Show Runtime Status…",
                 "Show Latest Recognition / Action Detail…",
                 "Manage Task Breakpoints…",
+                "Select MaaFramework Version…",
+                "Select npm Registry…",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(7)
+        window.on_done(9)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -660,6 +669,47 @@ class PluginTests(unittest.TestCase):
 
         self.assertEqual(self.plugin._break_tasks(project), ["Beta"])
         self.assertEqual(runtime.breakpoints, [["Beta"]])
+
+    def test_selects_native_version_and_registry(self):
+        window = FakeWindow([self.temp.name])
+        runtime = FakeRuntimeManager()
+        self.plugin._runtime_manager = runtime
+
+        version = self.plugin.MaaFrameworkSelectVersionCommand(window)
+        version.run()
+        self.assertEqual(
+            window.labels,
+            ["5.12.2 — in use", "5.11.0 — installed"],
+        )
+        window.on_done(1)
+        self.assertEqual(self.sublime.settings.get("maa_version"), "5.11.0")
+        self.assertEqual(runtime.shutdown_count, 1)
+
+        registry = self.plugin.MaaFrameworkSelectRegistryCommand(window)
+        registry.run()
+        self.assertEqual(
+            window.labels,
+            [
+                "npm — https://registry.npmjs.org (in use)",
+                "cnpm — https://registry.npmmirror.com",
+            ],
+        )
+        window.on_done(1)
+        self.assertEqual(
+            self.sublime.settings.get("npm_registry"),
+            "https://registry.npmmirror.com",
+        )
+
+    def test_filters_and_orders_supported_native_versions(self):
+        versions = ["5.12.2-beta.2", "5.4.9", "invalid", "5.12.2", "5.12.2-beta.10"]
+        filtered = [
+            version for version in versions if self.plugin._maa_version_key(version) is not None
+        ]
+        filtered.sort(key=self.plugin._maa_version_key, reverse=True)
+        self.assertEqual(
+            filtered,
+            ["5.12.2", "5.12.2-beta.10", "5.12.2-beta.2"],
+        )
 
 
 if __name__ == "__main__":

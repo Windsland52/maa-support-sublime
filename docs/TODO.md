@@ -66,7 +66,7 @@
 - [x] 启动、暂停、继续和停止任务
 - [x] 运行状态与识别详情
 - [x] 任务断点与调试协议
-- [ ] MaaFramework 版本与 registry 管理
+- [x] MaaFramework 版本与 registry 管理
 - [ ] Agent 子进程管理
 - [ ] 管理员、debug 和识别绘图模式
 - [ ] 全局快捷键控制
