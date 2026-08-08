@@ -10,6 +10,7 @@
 - `plugin.py`
 - `LSP-MaaFramework.sublime-settings`
 - `Default.sublime-commands`
+- `Default.sublime-keymap`
 - `sublime-package.json` 设置 schema
 - `dependencies.json`
 - 独立的 `server.mjs`
@@ -70,6 +71,14 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 - `Toggle Native Debug Mode` 映射 `maa.Global.debug_mode`；
 - `Toggle Recognition Drawing` 映射 `maa.Global.save_draw`，绘图写入项目 debug log 目录；
 - `Toggle Administrator Mode` 在 Windows 要求当前 Sublime 进程已经提升权限。插件不绕过 UAC 或静默自提权；未提升时 Start 会拒绝并提示通过“以管理员身份运行”重启 Sublime。非 Windows 平台不施加该检查。
+
+`Activate Global Shortcut Target` 把当前 Sublime window 设为运行控制目标。之后同一 Sublime 应用内任意窗口的快捷键都会路由到该目标：
+
+- `Ctrl+Alt+Shift+F5`：Start Queue；
+- `Ctrl+Alt+Shift+F6`：Pause / Continue 切换；
+- `Ctrl+Alt+Shift+F7`：Stop Runtime。
+
+这里的“全局”与相邻扩展一致，指编辑器多窗口间的目标路由；Sublime 失去系统焦点后不会安装操作系统级键盘 hook。用户可在 User keymap 覆盖按键，命令名保持稳定。
 
 ## 包名迁移
 

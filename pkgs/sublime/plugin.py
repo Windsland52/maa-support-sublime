@@ -362,6 +362,34 @@ class MaaRuntimeManager:
 _runtime_manager = MaaRuntimeManager()
 
 
+class MaaShortcutController:
+    def __init__(self) -> None:
+        self.target_window = None
+
+    def activate(self, window) -> None:
+        self.target_window = window
+        sublime.status_message("MaaFramework: this window is the global shortcut target")
+
+    def route(self, command: str) -> None:
+        window = self.target_window
+        if window is None:
+            sublime.status_message(
+                "MaaFramework: activate a shortcut target from the control panel first"
+            )
+            return
+        if command == "start":
+            window.run_command("maa_framework_start")
+        elif command == "toggle-pause":
+            _runtime_manager.control(
+                "continue" if _runtime_manager.state == "paused" else "pause"
+            )
+        elif command == "stop":
+            _runtime_manager.control("stop")
+
+
+_shortcut_controller = MaaShortcutController()
+
+
 def _maa_version_key(version: str):
     match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?", version)
     if not match:
@@ -592,8 +620,10 @@ def _update_view_status(view) -> None:
     status = _project_status(Path(file_name)) if file_name else None
     if status:
         view.set_status(STATUS_KEY, status)
+        view.settings().set(STATUS_KEY, True)
     else:
         view.erase_status(STATUS_KEY)
+        view.settings().erase(STATUS_KEY)
 
 
 def _refresh_window_statuses(window) -> None:
@@ -919,6 +949,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Toggle Administrator Mode",
             "Toggle Native Debug Mode",
             "Toggle Recognition Drawing",
+            "Activate Global Shortcut Target",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -942,6 +973,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_toggle_admin",
             "maa_framework_toggle_debug",
             "maa_framework_toggle_save_draw",
+            "maa_framework_activate_shortcuts",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -1132,6 +1164,26 @@ class MaaFrameworkToggleDebugCommand(_MaaFrameworkModeToggle, sublime_plugin.Win
 class MaaFrameworkToggleSaveDrawCommand(_MaaFrameworkModeToggle, sublime_plugin.WindowCommand):
     setting = "save_draw"
     label = "recognition drawing"
+
+
+class MaaFrameworkActivateShortcutsCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _shortcut_controller.activate(self.window)
+
+
+class MaaFrameworkShortcutStartCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _shortcut_controller.route("start")
+
+
+class MaaFrameworkShortcutTogglePauseCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _shortcut_controller.route("toggle-pause")
+
+
+class MaaFrameworkShortcutStopCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _shortcut_controller.route("stop")
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):

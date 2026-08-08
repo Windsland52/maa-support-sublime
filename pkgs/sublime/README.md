@@ -112,6 +112,8 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 管理员、native debug 和 recognition drawing 均可从控制面板切换。Windows 管理员模式要求以管理员身份运行 Sublime；插件不会绕过 UAC 自动提权。
 
+`Activate Global Shortcut Target` 后，可从任意 Sublime window 使用 `Ctrl+Alt+Shift+F5/F6/F7` 启动、切换暂停和停止目标任务。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

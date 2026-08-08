@@ -17,6 +17,9 @@ class FakeSettings:
     def set(self, key, value):
         self.values[key] = value
 
+    def erase(self, key):
+        self.values.pop(key, None)
+
 
 class FakeLspPlugin:
     @classmethod
@@ -64,6 +67,7 @@ class FakeRuntimeManager:
         self.shown = []
         self.breakpoints = []
         self.shutdown_count = 0
+        self.state = "idle"
 
     def start(self, project, window):
         self.started = (project, window)
@@ -127,6 +131,7 @@ class FakeView:
         self.syntax = None
         self.content = ""
         self.read_only = False
+        self._settings = FakeSettings()
 
     def file_name(self):
         return self._file_name
@@ -136,6 +141,9 @@ class FakeView:
 
     def set_status(self, key, value):
         self.statuses[key] = value
+
+    def settings(self):
+        return self._settings
 
     def erase_status(self, key):
         self.statuses.pop(key, None)
@@ -446,11 +454,13 @@ class PluginTests(unittest.TestCase):
             view.statuses[self.plugin.STATUS_KEY],
             "MaaFramework: Demo Project · resource: Extra · controller: Adb · locale: Chinese",
         )
+        self.assertTrue(view.settings().get(self.plugin.STATUS_KEY))
 
         generic = FakeView(str(Path(self.temp.name, "generic.json")))
         generic.statuses[self.plugin.STATUS_KEY] = "stale"
         self.plugin.MaaFrameworkProjectStatusListener().on_load_async(generic)
         self.assertNotIn(self.plugin.STATUS_KEY, generic.statuses)
+        self.assertIsNone(generic.settings().get(self.plugin.STATUS_KEY))
 
     def test_goes_to_task_in_active_resource(self):
         project = Path(self.temp.name, "workspace", "demo")
@@ -612,12 +622,13 @@ class PluginTests(unittest.TestCase):
                 "Toggle Administrator Mode",
                 "Toggle Native Debug Mode",
                 "Toggle Recognition Drawing",
+                "Activate Global Shortcut Target",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(13)
+        window.on_done(14)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -729,6 +740,22 @@ class PluginTests(unittest.TestCase):
         self.assertFalse(self.sublime.settings.get("debug_mode"))
         self.assertTrue(self.sublime.settings.get("save_draw"))
         self.assertEqual(runtime.shutdown_count, 3)
+
+    def test_routes_global_shortcuts_to_activated_window(self):
+        target = FakeWindow([self.temp.name])
+        source = FakeWindow([self.temp.name])
+        runtime = FakeRuntimeManager()
+        runtime.state = "paused"
+        self.plugin._runtime_manager = runtime
+        self.plugin._shortcut_controller = self.plugin.MaaShortcutController()
+
+        self.plugin.MaaFrameworkActivateShortcutsCommand(target).run()
+        self.plugin.MaaFrameworkShortcutStartCommand(source).run()
+        self.plugin.MaaFrameworkShortcutTogglePauseCommand(source).run()
+        self.plugin.MaaFrameworkShortcutStopCommand(source).run()
+
+        self.assertEqual(target.ran_command, ("maa_framework_start", None))
+        self.assertEqual(runtime.controls, ["continue", "stop"])
 
 
 if __name__ == "__main__":

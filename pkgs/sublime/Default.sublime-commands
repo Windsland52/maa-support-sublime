@@ -68,6 +68,10 @@
     "command": "maa_framework_toggle_save_draw"
   },
   {
+    "caption": "MaaFramework: Activate Global Shortcut Target",
+    "command": "maa_framework_activate_shortcuts"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

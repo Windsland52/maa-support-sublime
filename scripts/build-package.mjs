@@ -16,6 +16,7 @@ const files = [
     path.join(root, 'pkgs', 'sublime', 'LSP-MaaFramework.sublime-settings')
   ],
   ['Default.sublime-commands', path.join(root, 'pkgs', 'sublime', 'Default.sublime-commands')],
+  ['Default.sublime-keymap', path.join(root, 'pkgs', 'sublime', 'Default.sublime-keymap')],
   ['sublime-package.json', path.join(root, 'pkgs', 'sublime', 'sublime-package.json')],
   ['dependencies.json', path.join(root, 'pkgs', 'sublime', 'dependencies.json')],
   ['README.md', path.join(root, 'pkgs', 'sublime', 'README.md')],
