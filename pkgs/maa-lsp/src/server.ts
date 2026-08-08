@@ -140,13 +140,13 @@ let configWatchers: IContentWatcherController[] = []
 let refreshQueue = Promise.resolve()
 let selectionQueue = Promise.resolve()
 let publishQueue = Promise.resolve()
-const publishedUris = new Set<string>()
+const publishedDiagnostics = new Map<string, string>()
 
 function clearAllDiagnostics() {
-  for (const uri of publishedUris) {
+  for (const uri of publishedDiagnostics.keys()) {
     connection.sendDiagnostics({ uri, diagnostics: [] })
   }
-  publishedUris.clear()
+  publishedDiagnostics.clear()
 }
 
 async function teardownProjects() {
@@ -397,20 +397,23 @@ async function publishDiagnostics() {
     }
   }
 
-  const nextUris = new Set<string>()
+  const nextDiagnostics = new Map<string, string>()
   for (const [file, list] of byFile) {
     const uri = URI.file(file).toString()
-    nextUris.add(uri)
-    connection.sendDiagnostics({ uri, diagnostics: list })
+    const fingerprint = JSON.stringify(list)
+    nextDiagnostics.set(uri, fingerprint)
+    if (publishedDiagnostics.get(uri) !== fingerprint) {
+      connection.sendDiagnostics({ uri, diagnostics: list })
+    }
   }
-  for (const uri of publishedUris) {
-    if (!nextUris.has(uri)) {
+  for (const uri of publishedDiagnostics.keys()) {
+    if (!nextDiagnostics.has(uri)) {
       connection.sendDiagnostics({ uri, diagnostics: [] })
     }
   }
-  publishedUris.clear()
-  for (const uri of nextUris) {
-    publishedUris.add(uri)
+  publishedDiagnostics.clear()
+  for (const [uri, fingerprint] of nextDiagnostics) {
+    publishedDiagnostics.set(uri, fingerprint)
   }
 }
 

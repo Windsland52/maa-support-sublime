@@ -415,6 +415,15 @@ test('applies diagnostic severity and ignore overrides from maatools.config.mts'
         source: 'maa'
       }
     ])
+    await assert.rejects(
+      client.waitFor(
+        message =>
+          message.method === 'textDocument/publishDiagnostics' &&
+          message.params.diagnostics.some(diagnostic => diagnostic.message.includes('MissingTask')),
+        800
+      ),
+      /Timed out waiting for LSP message/
+    )
 
     await client.shutdown()
     client = undefined

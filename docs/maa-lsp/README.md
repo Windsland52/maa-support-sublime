@@ -26,6 +26,8 @@ workspace folder 增删或客户端报告 interface 文件新增/删除时会重
 
 `check.override` 以 manager 的诊断类型（例如 `unknown-task`、`dynamic-image`）为键，可将其覆盖成 `error`、`warning` 或 `ignore`。覆盖同时应用于初次扫描和配置热更新后的扫描。
 
+每次扫描按 URI 记录完整诊断指纹；内容未变化时不重复发送 `publishDiagnostics`。诊断新增、修改、清空以及项目卸载仍会正常通知客户端。
+
 ## 资源选择
 
 每个项目读取 interface 同级的 `config/maa_pi_config.json`：

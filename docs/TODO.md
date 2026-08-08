@@ -33,7 +33,7 @@
 - [x] 热更新 `config/maa_pi_config.json`
 - [x] 检测 MaaAssistantArknights 模式
 - [x] 报告配置加载失败
-- [ ] 避免启动时重复发布诊断
+- [x] 避免启动时重复发布诊断
 
 ## 语言服务
 
