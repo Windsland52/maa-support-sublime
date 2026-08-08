@@ -176,6 +176,7 @@ test('standalone server discovers recursive projects in every workspace', async 
       resolveProvider: false
     })
     assert.equal(initialized.result.capabilities.documentFormattingProvider, true)
+    assert.equal(initialized.result.capabilities.documentSymbolProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.inlayHintProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
@@ -679,6 +680,22 @@ test('completes pipeline tasks and interface references', async () => {
     })
     assert.match(interfaceHover.result.contents.value, /interface\.controller/)
     assert.match(interfaceHover.result.contents.value, /Adb/)
+    const pipelineSymbols = await client.request('textDocument/documentSymbol', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href }
+    })
+    assert.deepEqual(pipelineSymbols.result.map(symbol => symbol.name).sort(), [
+      'Entry',
+      'ExistingTask',
+      'Other'
+    ])
+    const interfaceSymbols = await client.request('textDocument/documentSymbol', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href }
+    })
+    assert.deepEqual(interfaceSymbols.result.map(symbol => symbol.name).sort(), [
+      'Adb',
+      'Default',
+      'Win32'
+    ])
 
     const pipelineReferences = await client.request('textDocument/references', {
       textDocument: { uri: pathToFileURL(pipelineFile).href },

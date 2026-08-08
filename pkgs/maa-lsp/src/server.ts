@@ -9,6 +9,7 @@ import {
   CompletionItemKind,
   type Definition,
   DiagnosticSeverity,
+  type DocumentSymbol,
   FileChangeType,
   Hover,
   type InitializeParams,
@@ -1168,6 +1169,7 @@ connection.onInitialize(params => {
       definitionProvider: true,
       documentLinkProvider: { resolveProvider: false },
       documentFormattingProvider: true,
+      documentSymbolProvider: true,
       hoverProvider: true,
       inlayHintProvider: true,
       referencesProvider: true,
@@ -1733,6 +1735,102 @@ connection.onDocumentFormatting(async params => {
         )
       })
     )
+  }
+  return null
+})
+
+connection.onDocumentSymbol(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    const layerInfo = project.bundle.locateLayer(file)
+    if (!layerInfo) {
+      continue
+    }
+    const interfaceSymbols: DocumentSymbol[] = []
+    for (const decl of project.bundle.info.decls) {
+      if (decl.file !== file) {
+        continue
+      }
+      const location = await toLocation(file, decl.location.offset, decl.location.length)
+      const name = 'name' in decl ? decl.name : ''
+      interfaceSymbols.push({
+        name,
+        detail: decl.type,
+        kind:
+          decl.type === 'interface.controller'
+            ? SymbolKind.Interface
+            : decl.type === 'interface.resource'
+              ? SymbolKind.Namespace
+              : decl.type === 'interface.task'
+                ? SymbolKind.Method
+                : decl.type === 'interface.option'
+                  ? SymbolKind.Property
+                  : decl.type === 'interface.language'
+                    ? SymbolKind.File
+                    : SymbolKind.Field,
+        range: location.range,
+        selectionRange: location.range
+      })
+    }
+    if (interfaceSymbols.length > 0) {
+      return interfaceSymbols
+    }
+
+    const [layer, fileName, isDefault] = layerInfo
+    const symbols: DocumentSymbol[] = []
+    if (!isDefault) {
+      for (const [task, taskInfos] of Object.entries(layer.tasks)) {
+        for (const info of taskInfos) {
+          if (info.file !== fileName) {
+            continue
+          }
+          const selection = await toLocation(file, info.prop.offset, info.prop.length)
+          const full = await toLocation(
+            file,
+            info.prop.offset,
+            info.data.offset + info.data.length - info.prop.offset
+          )
+          const children: DocumentSymbol[] = []
+          for (const decl of info.info.decls) {
+            if (decl.type !== 'task.anchor' && decl.type !== 'task.sub_reco') {
+              continue
+            }
+            const child = await toLocation(file, decl.location.offset, decl.location.length)
+            children.push({
+              name: decl.type === 'task.anchor' ? decl.anchor : decl.name,
+              detail: decl.type,
+              kind: decl.type === 'task.anchor' ? SymbolKind.Key : SymbolKind.Function,
+              range: child.range,
+              selectionRange: child.range
+            })
+          }
+          symbols.push({
+            name: task,
+            detail: 'pipeline task',
+            kind: SymbolKind.Class,
+            range: full.range,
+            selectionRange: selection.range,
+            children
+          })
+        }
+      }
+    }
+    for (const decl of layer.mergedDecls) {
+      if (decl.file !== fileName || decl.type !== 'task.locale') {
+        continue
+      }
+      const location = await toLocation(file, decl.location.offset, decl.location.length)
+      symbols.push({
+        name: decl.key,
+        detail: 'locale key',
+        kind: SymbolKind.String,
+        range: location.range,
+        selectionRange: location.range
+      })
+    }
+    return symbols
   }
   return null
 })
