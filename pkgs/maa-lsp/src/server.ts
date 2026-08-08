@@ -10,7 +10,9 @@ import {
   Location,
   type Diagnostic as LspDiagnostic,
   MarkupKind,
+  MessageType,
   Range,
+  ShowMessageNotification,
   TextDocumentSyncKind,
   TextDocuments,
   createConnection
@@ -276,6 +278,15 @@ async function setupProjects(roots: string[]) {
     configs.set(workspaceRoot, loaded.config)
     maaModes.set(workspaceRoot, await isMaaAssistantArknights(workspaceRoot))
     await watchMaaToolsConfig(loaded.file)
+    if (loaded.error) {
+      const detail = loaded.error instanceof Error ? loaded.error.message : String(loaded.error)
+      const message = `maa-lsp: failed to load ${loaded.file}: ${detail}`
+      connection.console.error(message)
+      connection.sendNotification(ShowMessageNotification.type, {
+        type: MessageType.Error,
+        message
+      })
+    }
     if (loaded.config) {
       connection.console.info(`maa-lsp: loaded ${MAATOOLS_CONFIG_FILE} from ${workspaceRoot}`)
     }

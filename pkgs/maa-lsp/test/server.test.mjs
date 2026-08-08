@@ -536,3 +536,48 @@ test('uses tasks and template directories in MaaAssistantArknights workspaces', 
     await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 })
+
+test('reports maatools.config.mts load failures without stopping the project', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-config-error-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    await addInterface(workspace, '.')
+    await writeFile(path.join(workspace, 'maatools.config.mts'), 'export default { broken:')
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    let shown
+    try {
+      shown = await client.waitFor(
+        message =>
+          message.method === 'window/showMessage' &&
+          message.params.type === 1 &&
+          message.params.message.includes('failed to load')
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+    assert.match(shown.params.message, /maatools\.config\.mts/)
+    assert.match(shown.params.message, /workspace/)
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
