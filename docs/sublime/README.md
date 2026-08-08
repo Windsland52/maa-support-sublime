@@ -105,6 +105,15 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 为控制大型日志的内存和 UI 开销，最多读取文件末尾 8 MiB、最多展示最近 300 条匹配记录；UI 会明确标识是否截断。文件读取和分析在线程池执行，不阻塞 Sublime UI。此功能只解析 MaaFramework 通用日志格式，不识别 MaaAssistantArknights 专有任务。
 
+## MaaLogAnalyzer 集成
+
+`MaaLogAnalyzer…` 提供两个互补入口：
+
+- `Runtime Inspection` 通过托管 Node/npm 将 MaaXYZ/MaaLogAnalyzer 官方发布的 `@windsland52/maa-log-tools` 安装到 Sublime cache，针对活动项目 `debug/` 执行 `--runtime-inspection --pretty`，并在只读 JSON 中展示 session、failure、outcome 和 signal。默认固定 `maa_log_tools_version: 1.3.0`，可在设置中升级，下载沿用所选 npm registry；
+- `Open Visual Analyzer` 打开官方 [mla.maafw.com](https://mla.maafw.com)，同时将活动项目 `debug/` 绝对路径复制到剪贴板，用户在网页文件选择器中手动选择。浏览器安全模型不允许插件替用户把本地日志静默上传。
+
+本地 Tauri v3.5.0 当前没有对外声明“启动时直接载入文件”的 CLI/文件关联接口，因此插件不伪造无效参数；可视化入口使用官方 Web，结构化检查使用官方可复用 parser。两者都不把 MaaAssistantArknights 逻辑带入本插件。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

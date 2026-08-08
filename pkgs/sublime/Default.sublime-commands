@@ -100,6 +100,10 @@
     "command": "maa_framework_analyze_logs"
   },
   {
+    "caption": "MaaFramework: MaaLogAnalyzer",
+    "command": "maa_framework_maa_log_analyzer"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

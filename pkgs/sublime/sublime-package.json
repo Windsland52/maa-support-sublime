@@ -18,10 +18,15 @@
                   "default": "5.12.2",
                   "markdownDescription": "Semantic version of `@maaxyz/maa-node` installed into the Sublime cache for task execution."
                 },
+                "maa_log_tools_version": {
+                  "type": "string",
+                  "default": "1.3.0",
+                  "markdownDescription": "Version of the official `@windsland52/maa-log-tools` package installed into the Sublime cache for MaaLogAnalyzer runtime inspection."
+                },
                 "npm_registry": {
                   "type": "string",
                   "default": "https://registry.npmjs.org",
-                  "markdownDescription": "npm registry used only to install the selected MaaFramework native runtime."
+                  "markdownDescription": "npm registry used to install the selected MaaFramework native runtime and optional MaaLogAnalyzer tools."
                 },
                 "debug_mode": {
                   "type": "boolean",

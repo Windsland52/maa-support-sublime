@@ -8,6 +8,7 @@ import re
 import subprocess
 import threading
 import uuid
+import webbrowser
 from pathlib import Path
 from typing import Any, Optional
 
@@ -38,6 +39,7 @@ INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
 LOG_TAIL_LIMIT = 8 * 1024 * 1024
+MAA_LOG_ANALYZER_URL = "https://mla.maafw.com"
 _known_maa_workspaces: set[Path] = set()
 
 
@@ -445,6 +447,131 @@ class MaaRuntimeManager:
 _runtime_manager = MaaRuntimeManager()
 
 
+class MaaLogAnalyzerManager:
+    def inspect(self, project: Path, window) -> None:
+        if not _maa_log_files(project):
+            sublime.status_message("MaaFramework: no logs found for MaaLogAnalyzer")
+            return
+        sublime.status_message("MaaFramework: preparing MaaLogAnalyzer runtime inspection…")
+        sublime.set_timeout_async(lambda: self._inspect(project, window))
+
+    def _inspect(self, project: Path, window) -> None:
+        try:
+            node, cli, version = self._prepare_tools()
+            completed = subprocess.run(
+                [
+                    str(node.node_binary_path()),
+                    str(cli),
+                    str(project / "debug"),
+                    "--runtime-inspection",
+                    "--pretty",
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env={**os.environ, **node.node_env()},
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=300,
+                check=False,
+            )
+            if completed.returncode != 0:
+                raise RuntimeError(
+                    completed.stderr.strip()
+                    or completed.stdout.strip()
+                    or f"MaaLogAnalyzer exited with code {completed.returncode}"
+                )
+            result = json.loads(completed.stdout)
+            content = json.dumps(result, ensure_ascii=False, indent=4) + "\n"
+            sublime.set_timeout(
+                lambda: _show_report(
+                    window,
+                    f"MaaLogAnalyzer Runtime Inspection {version}",
+                    content,
+                    "Packages/JSON/JSON.sublime-syntax",
+                )
+            )
+        except Exception as error:
+            sublime.set_timeout(
+                lambda error=error: sublime.status_message(
+                    f"MaaFramework: MaaLogAnalyzer failed: {error}"
+                )
+            )
+
+    def _prepare_tools(self):
+        settings = sublime.load_settings(SETTINGS_FILE)
+        version = settings.get("maa_log_tools_version", "1.3.0")
+        registry = settings.get("npm_registry", NPM_REGISTRIES["npm"])
+        if not isinstance(version, str) or not re.fullmatch(
+            r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version
+        ):
+            raise RuntimeError(f"invalid MaaLogAnalyzer tools version {version!r}")
+        if not isinstance(registry, str) or not registry.startswith(("https://", "http://")):
+            raise RuntimeError(f"invalid npm registry {registry!r}")
+        node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
+        install = Path(sublime.cache_path()) / PACKAGE_NAME / "maa-log-analyzer" / version
+        cli = (
+            install
+            / "node_modules"
+            / "@windsland52"
+            / "maa-log-tools"
+            / "dist"
+            / "cli.js"
+        )
+        if not cli.is_file():
+            install.mkdir(parents=True, exist_ok=True)
+            command = [str(part) for part in node.npm_command()]
+            command.extend(
+                [
+                    "install",
+                    "--prefix",
+                    str(install),
+                    "--omit=dev",
+                    "--no-audit",
+                    "--no-fund",
+                    "--registry",
+                    registry,
+                    f"@windsland52/maa-log-tools@{version}",
+                ]
+            )
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env={**os.environ, **node.node_env()},
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=600,
+                check=False,
+            )
+            if completed.returncode != 0 or not cli.is_file():
+                raise RuntimeError(
+                    "cannot install official MaaLogAnalyzer tools: "
+                    + (completed.stderr.strip() or completed.stdout.strip())
+                )
+        return node, cli, version
+
+    def open_web(self, project: Path) -> None:
+        debug = project / "debug"
+        sublime.set_clipboard(str(debug))
+
+        def open_analyzer() -> None:
+            opened = webbrowser.open_new_tab(MAA_LOG_ANALYZER_URL)
+            sublime.set_timeout(
+                lambda: sublime.status_message(
+                    "MaaFramework: project debug path copied; choose it in MaaLogAnalyzer"
+                    if opened
+                    else f"MaaFramework: open {MAA_LOG_ANALYZER_URL} and choose {debug}"
+                )
+            )
+
+        sublime.set_timeout_async(open_analyzer)
+
+
+_log_analyzer_manager = MaaLogAnalyzerManager()
+
+
 class MaaShortcutController:
     def __init__(self) -> None:
         self.target_window = None
@@ -491,6 +618,7 @@ def _control_panel_html() -> str:
         ("Template Match", "maa_framework_test_template_match"),
         ("Pipeline Recognition", "maa_framework_test_pipeline_recognition"),
         ("Analyze Logs", "maa_framework_analyze_logs"),
+        ("MaaLogAnalyzer", "maa_framework_maa_log_analyzer"),
         ("Refresh", "maa_framework_browser_panel_refresh"),
     ]
     controls = " ".join(
@@ -1204,6 +1332,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Test Template Match…",
             "Test Pipeline Recognition…",
             "Analyze Maa Logs…",
+            "MaaLogAnalyzer…",
             "Manage Task Breakpoints…",
             "Select MaaFramework Version…",
             "Select npm Registry…",
@@ -1235,6 +1364,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_test_template_match",
             "maa_framework_test_pipeline_recognition",
             "maa_framework_analyze_logs",
+            "maa_framework_maa_log_analyzer",
             "maa_framework_breakpoints",
             "maa_framework_select_version",
             "maa_framework_select_registry",
@@ -1458,6 +1588,28 @@ class MaaFrameworkOpenLogCommand(sublime_plugin.WindowCommand):
             sublime.status_message("MaaFramework: log path is outside the active project")
             return
         self.window.open_file(str(selected))
+
+
+class MaaFrameworkMaaLogAnalyzerCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        self._project = project
+        self.window.show_quick_panel(
+            [
+                ["Runtime Inspection", "Use the official MaaLogAnalyzer parser in Sublime"],
+                ["Open Visual Analyzer", MAA_LOG_ANALYZER_URL],
+            ],
+            self._on_done,
+        )
+
+    def _on_done(self, index: int) -> None:
+        if index == 0:
+            _log_analyzer_manager.inspect(self._project, self.window)
+        elif index == 1:
+            _log_analyzer_manager.open_web(self._project)
 
 
 class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):

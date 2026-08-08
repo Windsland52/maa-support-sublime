@@ -110,6 +110,17 @@ class FakeRuntimeManager:
         self.shutdown_count += 1
 
 
+class FakeLogAnalyzerManager:
+    def __init__(self):
+        self.calls = []
+
+    def inspect(self, project, window):
+        self.calls.append(("inspect", project, window))
+
+    def open_web(self, project):
+        self.calls.append(("web", project))
+
+
 class FakeNodeRunner:
     def node_env(self):
         return {"NODE_TEST_RUNTIME": "1"}
@@ -119,6 +130,9 @@ class FakeNodeRunner:
 
     def resolve_version(self):
         return "24.0.0"
+
+    def npm_command(self):
+        return ["managed-node", "npm-cli.js"]
 
 
 class FakeNodeManager:
@@ -250,6 +264,7 @@ class FakeSublime(types.ModuleType):
         self.settings = FakeSettings()
         self.server = b"first"
         self.messages = []
+        self.clipboard = None
 
     def load_settings(self, _name):
         return self.settings
@@ -277,6 +292,9 @@ class FakeSublime(types.ModuleType):
 
     def save_settings(self, _name):
         pass
+
+    def set_clipboard(self, value):
+        self.clipboard = value
 
     def command_url(self, command, _args=None):
         return f"subl:{command}"
@@ -669,6 +687,7 @@ class PluginTests(unittest.TestCase):
                 "Test Template Match…",
                 "Test Pipeline Recognition…",
                 "Analyze Maa Logs…",
+                "MaaLogAnalyzer…",
                 "Manage Task Breakpoints…",
                 "Select MaaFramework Version…",
                 "Select npm Registry…",
@@ -682,7 +701,7 @@ class PluginTests(unittest.TestCase):
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(21)
+        window.on_done(22)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -897,6 +916,38 @@ class PluginTests(unittest.TestCase):
 
         self.plugin.MaaFrameworkOpenLogCommand(window).run(str(log))
         self.assertEqual(window.opened, (str(log.resolve()), 0))
+
+    def test_routes_maa_log_analyzer_runtime_and_web_actions(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+        analyzer = FakeLogAnalyzerManager()
+        self.plugin._log_analyzer_manager = analyzer
+
+        command = self.plugin.MaaFrameworkMaaLogAnalyzerCommand(window)
+        command.run()
+        self.assertEqual(
+            window.labels,
+            [
+                ["Runtime Inspection", "Use the official MaaLogAnalyzer parser in Sublime"],
+                ["Open Visual Analyzer", "https://mla.maafw.com"],
+            ],
+        )
+        window.on_done(0)
+        command.run()
+        window.on_done(1)
+
+        self.assertEqual(
+            analyzer.calls,
+            [("inspect", project, window), ("web", project)],
+        )
 
 
 if __name__ == "__main__":

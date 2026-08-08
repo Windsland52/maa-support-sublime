@@ -116,6 +116,8 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 `Open Browser Execution Panel` 使用内置 minihtml sheet 显示实时 IPC event，并通过安全的 `subl:` command URL 控制 worker；不开放 localhost 控制端口。
 
+`Analyze Logs` 提供无需外部依赖的日志级别和 Maa event 汇总。`MaaLogAnalyzer…` 可按需安装官方 `@windsland52/maa-log-tools` 到 Sublime cache 并生成 runtime-inspection JSON，或打开 [MaaLogAnalyzer Web](https://mla.maafw.com)；打开网页时会复制当前项目 `debug/` 路径，但不会自动上传本地文件。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

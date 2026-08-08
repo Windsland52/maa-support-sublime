@@ -77,7 +77,7 @@
 - [x] 截图与裁剪
 - [x] OCR、模板匹配与 pipeline 识别测试
 - [x] Maa 日志分析 UI
-- [ ] MaaLogAnalyzer 集成
+- [x] MaaLogAnalyzer 集成
 
 ## 稳定性
 
