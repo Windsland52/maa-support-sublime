@@ -757,6 +757,59 @@ function escapedStringContent(value: string): string {
   return escaped.slice(1, -1)
 }
 
+function clampColor(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
+function hsvToRgb(hue: number, saturation: number, value: number): [number, number, number] {
+  const h = ((hue / 179) * 360 + 360) % 360
+  const s = clampColor(saturation / 255)
+  const v = clampColor(value / 255)
+  const chroma = v * s
+  const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1))
+  const offset = v - chroma
+  const [red, green, blue] =
+    h < 60
+      ? [chroma, x, 0]
+      : h < 120
+        ? [x, chroma, 0]
+        : h < 180
+          ? [0, chroma, x]
+          : h < 240
+            ? [0, x, chroma]
+            : h < 300
+              ? [x, 0, chroma]
+              : [chroma, 0, x]
+  return [red + offset, green + offset, blue + offset]
+}
+
+function rgbToHsv(red: number, green: number, blue: number): [number, number, number] {
+  const r = clampColor(red)
+  const g = clampColor(green)
+  const b = clampColor(blue)
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  const delta = max - min
+  let hue = 0
+  if (delta !== 0) {
+    if (max === r) {
+      hue = 60 * (((g - b) / delta) % 6)
+    } else if (max === g) {
+      hue = 60 * ((b - r) / delta + 2)
+    } else {
+      hue = 60 * ((r - g) / delta + 4)
+    }
+  }
+  if (hue < 0) {
+    hue += 360
+  }
+  return [
+    Math.round((hue / 360) * 179),
+    Math.round((max === 0 ? 0 : delta / max) * 255),
+    Math.round(max * 255)
+  ]
+}
+
 async function pathExists(target: string): Promise<boolean> {
   try {
     await fs.access(target)
@@ -913,6 +966,7 @@ connection.onInitialize(params => {
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
       },
+      colorProvider: true,
       definitionProvider: true,
       documentLinkProvider: { resolveProvider: false },
       hoverProvider: true,
@@ -1334,6 +1388,67 @@ connection.onDocumentLinks(async params => {
     return links
   }
   return null
+})
+
+connection.onDocumentColor(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    const layerInfo = project.bundle.locateLayer(file)
+    if (!layerInfo) {
+      continue
+    }
+    const [layer, fileName] = layerInfo
+    const colors = []
+    for (const ref of layer.mergedRefs) {
+      if (ref.file !== fileName || ref.type !== 'task.color') {
+        continue
+      }
+      const [red, green, blue] =
+        ref.method === 'hsv'
+          ? hsvToRgb(ref.color[0], ref.color[1], ref.color[2])
+          : ref.color.map(component => clampColor(component / 255))
+      const location = await toLocation(file, ref.location.offset, ref.location.length)
+      colors.push({
+        range: location.range,
+        color: { red, green, blue, alpha: 1 }
+      })
+    }
+    return colors
+  }
+  return null
+})
+
+connection.onColorPresentation(async params => {
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.range.start.line,
+    params.range.start.character
+  )
+  if (!ctx) {
+    return null
+  }
+  const layerInfo = ctx.project.bundle.locateLayer(ctx.file as AbsolutePath)
+  if (!layerInfo) {
+    return null
+  }
+  const [layer, fileName] = layerInfo
+  const ref = findDeclRef(
+    layer.mergedRefs.filter(candidate => candidate.file === fileName),
+    ctx.offset
+  )
+  if (ref?.type !== 'task.color') {
+    return []
+  }
+  const values =
+    ref.method === 'hsv'
+      ? rgbToHsv(params.color.red, params.color.green, params.color.blue)
+      : [params.color.red, params.color.green, params.color.blue].map(component =>
+          Math.round(clampColor(component) * 255)
+        )
+  const label = JSON.stringify(values)
+  return [{ label, textEdit: TextEdit.replace(params.range, label) }]
 })
 
 connection.onDefinition(async params => {

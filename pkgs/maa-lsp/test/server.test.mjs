@@ -161,6 +161,7 @@ test('standalone server discovers recursive projects in every workspace', async 
       'quickfix',
       'refactor.rewrite'
     ])
+    assert.equal(initialized.result.capabilities.colorProvider, true)
 
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
     const loaded = await client.waitFor(
@@ -868,6 +869,82 @@ test('links interface resource paths and pipeline template images', async () => 
       pipelineLinks.result.map(link => path.normalize(fileURLToPath(link.target)).toLowerCase()),
       [path.normalize(imageFile).toLowerCase()]
     )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('provides RGB and HSV document colors with presentations', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-colors-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(
+      pipelineFile,
+      JSON.stringify(
+        {
+          RgbTask: {
+            recognition: {
+              type: 'ColorMatch',
+              param: { method: 4, lower: [255, 0, 0], upper: [0, 255, 255] }
+            }
+          },
+          HsvTask: {
+            recognition: {
+              type: 'ColorMatch',
+              param: { method: 40, lower: [60, 255, 255] }
+            }
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    const colors = await client.request('textDocument/documentColor', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href }
+    })
+    assert.equal(colors.result.length, 3)
+    assert.deepEqual(colors.result[0].color, { red: 1, green: 0, blue: 0, alpha: 1 })
+    assert.ok(colors.result[2].color.green > 0.99)
+    assert.ok(colors.result[2].color.red < 0.02)
+    const presentation = await client.request('textDocument/colorPresentation', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      range: colors.result[0].range,
+      color: { red: 0, green: 1, blue: 0, alpha: 1 }
+    })
+    assert.deepEqual(
+      presentation.result.map(item => item.label),
+      ['[0,255,0]']
+    )
+    assert.deepEqual(presentation.result[0].textEdit.range, colors.result[0].range)
 
     await client.shutdown()
     client = undefined

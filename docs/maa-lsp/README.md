@@ -53,6 +53,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Inlay Hint（任务文档与当前 locale 文本）
 - Code Action（任务 v1/v2 语法互转与图片路径 quick-fix）
 - Document Link（interface 路径、模板图片与本地文档）
+- Document Color（RGB/HSV 颜色预览与回写）
 - Hover
 - Multi-root workspace
 

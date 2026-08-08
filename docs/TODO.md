@@ -44,7 +44,7 @@
 - [x] Inlay Hint
 - [x] Code Action
 - [x] Document Link
-- [ ] Document Color
+- [x] Document Color
 - [ ] 完整 Hover
 - [x] ~~MaaAssistantArknights 特殊引用、悬停和求值~~（不在本插件范围）
 - [ ] Formatting
