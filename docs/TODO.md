@@ -15,6 +15,7 @@
 - [ ] 在真实 Sublime Text + LSP 包 + Maa 项目中完成端到端人工验收
 - [x] 确定公开 GitHub URL，并提供 Package Control 自定义 repository 配置
 - [x] 创建首个语义版本 Release（`v0.1.0`）
+- [x] 自定义 repository 兼容 Package Control 3.4.1
 - [ ] 提交 Package Control 默认 channel
 
 ## MVP 之后

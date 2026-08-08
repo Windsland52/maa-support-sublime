@@ -29,5 +29,5 @@
 
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试和安装包构建；
 - 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `MaaLSP.sublime-package`；
-- 根目录 `repository.json` 使用 GitHub Release asset，允许用户在正式收录前通过 Package Control 的 `Add Repository` 安装；
+- 根目录 `repository.json` 使用 schema 3 和显式 GitHub Release 下载地址，兼容 Package Control 3.4.1，允许用户在正式收录前通过 `Add Repository` 安装；
 - Package Control 默认 channel 条目需在首个 Release 建立后另行提交。

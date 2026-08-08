@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm -r --if-present build",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test && python -B -m unittest pkgs/sublime/test_plugin.py",
+    "test": "pnpm -r --if-present test && node --test test/*.test.mjs && python -B -m unittest pkgs/sublime/test_plugin.py",
     "package:sublime": "pnpm build && node scripts/build-package.mjs",
     "release:sublime": "pnpm test && node scripts/build-package.mjs"
   },
