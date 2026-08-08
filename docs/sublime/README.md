@@ -63,6 +63,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 `Select MaaFramework Version` 使用托管 Node 的 npm 查询 `@maaxyz/maa-node` 版本，过滤低于 5.5.0 的版本并按 semver 降序显示；当前版本和 Sublime cache 中已安装的版本带状态标记。选择新版本会关闭旧 worker，下一次 Start 时安装并加载。`Select npm Registry` 可在官方 npm 与 npmmirror/cnpm 间切换，影响版本查询和后续安装。
 
+interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`、启动子进程并通过 MaaFramework Client 绑定当前 Resource/Controller/Tasker。Agent stdout/stderr 与生命周期进入 runtime history；`agent_timeout` 控制连接等待。`Stop Agent Processes` 可独立 destroy Client 并终止子进程，Stop/Shutdown 也保证回收。VS Code `launch.json` debug-session 映射没有跨编辑器语义，因此不实现。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

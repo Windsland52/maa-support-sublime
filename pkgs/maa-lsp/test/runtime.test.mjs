@@ -126,6 +126,19 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         post_stop() { return new Operation() }
         destroy() {}
       }
+      class Client {
+        constructor(identifier) {
+          this.identifier = identifier || 'fake-agent'
+          this.connected = true
+          this.alive = true
+        }
+        bind_resource() {}
+        async connect() {}
+        register_controller_sink() {}
+        register_resource_sink() {}
+        register_tasker_sink() {}
+        destroy() { this.alive = false }
+      }
       globalThis.maa = {
         Global: { version: '5.12.2' },
         AdbController: Controller,
@@ -134,6 +147,7 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         GamepadController: Controller,
         Resource,
         Tasker,
+        Client,
         Win32ScreencapMethod: { FramePool: 'FramePool' },
         Win32InputMethod: { SendMessageWithCursorPos: 'Cursor', SendMessage: 'Message' },
         GamepadType: { Xbox360: 'Xbox360' }
@@ -148,7 +162,12 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         task: [
           { name: 'First', entry: 'Entry' },
           { name: 'Second', entry: 'Done' }
-        ]
+        ],
+        agent: {
+          child_exec: process.execPath,
+          child_args: ['-e', 'setInterval(() => {}, 1000)'],
+          identifier: 'fake-agent'
+        }
       })
     )
     await writeFile(
@@ -173,6 +192,7 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     })
     assert.equal(started.error, undefined)
     assert.deepEqual(started.result.tasks, ['First', 'Second'])
+    assert.deepEqual(started.result.agents, ['fake-agent'])
     assert.equal(started.result.version, '5.12.2')
 
     const breakpoint = await client.waitFor(message => message.event === 'breakpoint')
@@ -187,6 +207,8 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     const status = await client.request('status')
     assert.equal(status.result.status, 'finished')
     assert.deepEqual(status.result.queue, ['First', 'Second'])
+    assert.equal(status.result.agents[0].identifier, 'fake-agent')
+    assert.equal(status.result.agents[0].running, true)
     assert.ok(status.result.history.some(item => item.event === 'tasker'))
     const detail = await client.request('recognitionDetail', { id: 7 })
     assert.equal(detail.result.info.name, 'Entry')
@@ -195,6 +217,8 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     assert.deepEqual((await client.request('setBreakpoints', { tasks: ['Entry'] })).result, [
       'Entry'
     ])
+    assert.equal((await client.request('stopAgents')).result, true)
+    assert.deepEqual((await client.request('status')).result.agents, [])
     assert.equal((await client.request('stop')).result, true)
     assert.equal((await client.shutdown()).result, true)
     client = undefined

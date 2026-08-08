@@ -32,6 +32,10 @@
     "command": "maa_framework_stop"
   },
   {
+    "caption": "MaaFramework: Stop Agent Processes",
+    "command": "maa_framework_stop_agents"
+  },
+  {
     "caption": "MaaFramework: Show Runtime Status",
     "command": "maa_framework_runtime_status"
   },

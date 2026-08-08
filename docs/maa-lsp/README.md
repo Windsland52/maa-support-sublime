@@ -75,3 +75,5 @@ pause 在 tasker sink 上施加异步闸门并阻止下一队列项开始；cont
 worker 保留最近 500 条 controller/resource/tasker/task/state event。`status` 返回当前状态、当前任务、队列与该有界历史；`recognitionDetail`、`actionDetail` 和 `nodeDetail` 分别读取 native Tasker/Resource 的识别、动作和 pipeline node 详情。识别原图与 draws 转换为 PNG data URL 后跨进程返回。
 
 `start.breakTasks` 和运行时 `setBreakpoints` 设置 pipeline node 名称集合。当 Tasker 的 `*.Starting` 通知命中断点时，worker 先发布 `breakpoint` 与带 `reason: breakpoint` 的 paused state，再在 sink 异步闸门等待 continue/stop。这组逐行 JSON 请求、响应和 event 构成本插件的轻量调试协议。
+
+interface 的 `agent.child_exec` / `child_args` 由 worker 直接启动，`{PROJECT_DIR}` 在可执行文件和参数中展开。worker 为每项创建 native Client，传入 MaaPi/Sublime 环境、resource path 和连接超时，连接成功后注册 controller/resource/tasker sink。stdout、stderr 与 connected/exited/stopped 生命周期作为 agent event 返回；`stopAgents`、stop 后的 session 销毁和 shutdown 都会 destroy Client 并终止仍存活的子进程。VS Code 专用的 debug-session 映射不在本插件范围。

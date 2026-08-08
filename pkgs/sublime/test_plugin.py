@@ -603,6 +603,7 @@ class PluginTests(unittest.TestCase):
                 "Pause Runtime",
                 "Continue Runtime",
                 "Stop Runtime",
+                "Stop Agent Processes",
                 "Show Runtime Status…",
                 "Show Latest Recognition / Action Detail…",
                 "Manage Task Breakpoints…",
@@ -613,7 +614,7 @@ class PluginTests(unittest.TestCase):
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(9)
+        window.on_done(10)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -641,11 +642,12 @@ class PluginTests(unittest.TestCase):
         self.plugin.MaaFrameworkPauseCommand(window).run()
         self.plugin.MaaFrameworkContinueCommand(window).run()
         self.plugin.MaaFrameworkStopCommand(window).run()
+        self.plugin.MaaFrameworkStopAgentsCommand(window).run()
         self.plugin.MaaFrameworkRuntimeStatusCommand(window).run()
         self.plugin.MaaFrameworkRuntimeDetailCommand(window).run()
 
         self.assertEqual(runtime.started, (project, window))
-        self.assertEqual(runtime.controls, ["pause", "continue", "stop"])
+        self.assertEqual(runtime.controls, ["pause", "continue", "stop", "stopAgents"])
         self.assertEqual(runtime.shown, [("status", window), ("detail", window)])
 
     def test_toggles_project_task_breakpoints_and_syncs_runtime(self):

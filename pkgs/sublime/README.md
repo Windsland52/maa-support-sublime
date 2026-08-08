@@ -108,6 +108,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `Select MaaFramework Version` 查询、标记并切换 5.5.0 以上 native 版本；`Select npm Registry` 在 npm 与 npmmirror 源间切换。
 
+interface Agent 由 worker 作为子进程启动并绑定 native Client；输出与状态进入 runtime history，`Stop Agent Processes` 或 Stop/Shutdown 会统一回收。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

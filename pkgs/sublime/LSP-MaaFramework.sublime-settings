@@ -7,5 +7,6 @@
   "npm_registry": "https://registry.npmjs.org",
   "debug_mode": true,
   "save_draw": false,
+  "agent_timeout": 30000,
   "break_tasks": {}
 }

@@ -70,6 +70,7 @@ class MaaRuntimeManager:
                     "saveDraw": settings.get("save_draw", False),
                     "logDir": str(log_dir),
                     "breakTasks": _break_tasks(project),
+                    "agentTimeout": settings.get("agent_timeout", 30000),
                 },
                 self._started,
             )
@@ -894,6 +895,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Pause Runtime",
             "Continue Runtime",
             "Stop Runtime",
+            "Stop Agent Processes",
             "Show Runtime Status…",
             "Show Latest Recognition / Action Detail…",
             "Manage Task Breakpoints…",
@@ -913,6 +915,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_pause",
             "maa_framework_continue",
             "maa_framework_stop",
+            "maa_framework_stop_agents",
             "maa_framework_runtime_status",
             "maa_framework_runtime_detail",
             "maa_framework_breakpoints",
@@ -963,6 +966,10 @@ class MaaFrameworkContinueCommand(_MaaFrameworkRuntimeControl, sublime_plugin.Wi
 
 class MaaFrameworkStopCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
     method = "stop"
+
+
+class MaaFrameworkStopAgentsCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
+    method = "stopAgents"
 
 
 class MaaFrameworkRuntimeStatusCommand(sublime_plugin.WindowCommand):

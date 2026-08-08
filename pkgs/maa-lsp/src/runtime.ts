@@ -1,4 +1,5 @@
 import { parse } from 'jsonc-parser'
+import { type ChildProcess, spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -28,6 +29,13 @@ type RuntimeSession = {
   resource: NativeObject & Record<string, unknown>
   tasker: NativeObject & Record<string, unknown>
   tasks: TaskRuntime['tasks']
+  agents: RuntimeAgent[]
+}
+
+type RuntimeAgent = {
+  child: ChildProcess
+  client: NativeObject & Record<string, unknown>
+  identifier: string
 }
 
 let native: Record<string, any> | null = null
@@ -113,11 +121,94 @@ async function destroySession() {
   } catch {
     // Continue destroying native objects after a failed stop request.
   }
+  await stopAgents()
   session.tasker.destroy()
   session.resource.destroy()
   session.controller.destroy()
   session = null
   currentTask = null
+}
+
+async function stopAgents() {
+  const agents = session?.agents ?? []
+  if (session) {
+    session.agents = []
+  }
+  for (const agent of agents) {
+    agent.client.destroy()
+    if (agent.child.exitCode === null) {
+      agent.child.kill()
+    }
+    notify('agent', { status: 'stopped', identifier: agent.identifier })
+  }
+}
+
+async function setupAgents(
+  data: Interface,
+  project: string,
+  resource: NativeObject & Record<string, unknown>,
+  resourcePaths: string[],
+  timeout: number
+): Promise<RuntimeAgent[]> {
+  if (!native) {
+    return []
+  }
+  const configs = Array.isArray(data.agent) ? data.agent : data.agent ? [data.agent] : []
+  const agents: RuntimeAgent[] = []
+  for (const config of configs) {
+    if (!config.child_exec) {
+      continue
+    }
+    const executable = config.child_exec.replaceAll('{PROJECT_DIR}', project)
+    const client = new native.Client(config.identifier) as NativeObject & Record<string, unknown>
+    const identifier = String(client.identifier ?? config.identifier ?? 'maa-sublime-agent')
+    const args = (config.child_args ?? [])
+      .map(argument => argument.replaceAll('{PROJECT_DIR}', project))
+      .concat(identifier)
+    const child = spawn(executable, args, {
+      cwd: project,
+      env: {
+        ...process.env,
+        VSCODE_MAAFW_AGENT: '1',
+        VSCODE_MAAFW_AGENT_ROOT: project,
+        VSCODE_MAAFW_AGENT_RESOURCE: resourcePaths
+          .map(relative => path.resolve(project, relative))
+          .join(path.delimiter),
+        PI_INTERFACE_VERSION: 'v2.5.0',
+        PI_CLIENT_NAME: 'SublimeText',
+        PI_CLIENT_LANGUAGE: 'en-us',
+        PI_CLIENT_MAAFW_VERSION: String((native.Global as Record<string, unknown>).version ?? '')
+      },
+      stdio: ['ignore', 'pipe', 'pipe']
+    })
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    child.stdout?.on('data', output =>
+      notify('agentOutput', { identifier, category: 'stdout', output })
+    )
+    child.stderr?.on('data', output =>
+      notify('agentOutput', { identifier, category: 'stderr', output })
+    )
+    ;(client as any).timeout = String(timeout)
+    ;(client as any).bind_resource(resource)
+    const stopped = new Promise<boolean>(resolve => {
+      child.once('exit', () => resolve(false))
+      child.once('error', () => resolve(false))
+    })
+    const connected = await Promise.race([(client as any).connect().then(() => true), stopped])
+    if (!(connected && (client as any).connected && (client as any).alive)) {
+      client.destroy()
+      if (child.exitCode === null) {
+        child.kill()
+      }
+      throw new Error(`Cannot connect MaaFramework agent ${identifier}`)
+    }
+    ;(client as any).timeout = String(Number.MAX_SAFE_INTEGER)
+    agents.push({ child, client, identifier })
+    child.once('exit', code => notify('agent', { status: 'exited', identifier, code }))
+    notify('agent', { status: 'connected', identifier, pid: child.pid })
+  }
+  return agents
 }
 
 async function setup(params: Record<string, unknown>) {
@@ -190,13 +281,41 @@ async function setup(params: Record<string, unknown>) {
   ;(tasker as any).add_context_sink?.((_id: unknown, message: unknown) => pushNotify(message))
   tasker.controller = controller
   tasker.resource = resource
+  let agents: RuntimeAgent[] = []
+  try {
+    agents = await setupAgents(
+      data,
+      project,
+      resource,
+      resourceRuntime.paths,
+      typeof params.agentTimeout === 'number' ? params.agentTimeout : 30_000
+    )
+    for (const agent of agents) {
+      ;(agent.client as any).register_controller_sink(controller)
+      ;(agent.client as any).register_resource_sink(resource)
+      ;(agent.client as any).register_tasker_sink(tasker)
+    }
+  } catch (error) {
+    for (const agent of agents) {
+      agent.client.destroy()
+      agent.child.kill()
+    }
+    tasker.destroy()
+    resource.destroy()
+    controller.destroy()
+    throw error
+  }
   if (!tasker.inited) {
+    for (const agent of agents) {
+      agent.client.destroy()
+      agent.child.kill()
+    }
     tasker.destroy()
     resource.destroy()
     controller.destroy()
     throw new Error('Cannot initialize MaaFramework Tasker')
   }
-  session = { controller, resource, tasker, tasks: taskRuntime.tasks }
+  session = { controller, resource, tasker, tasks: taskRuntime.tasks, agents }
   history.length = 0
   breakTasks = new Set(
     Array.isArray(params.breakTasks)
@@ -210,6 +329,7 @@ async function setup(params: Record<string, unknown>) {
     controller: controllerRuntime.name,
     resource: resourceRuntime.name,
     tasks: taskRuntime.tasks.map(task => task.name),
+    agents: agents.map(agent => agent.identifier),
     version: (native.Global as Record<string, unknown>).version ?? null
   }
 }
@@ -322,6 +442,12 @@ async function handle(request: Request): Promise<unknown> {
         status: runtimeStatus,
         currentTask,
         queue: session?.tasks.map(task => task.name) ?? [],
+        agents:
+          session?.agents.map(agent => ({
+            identifier: agent.identifier,
+            pid: agent.child.pid,
+            running: agent.child.exitCode === null
+          })) ?? [],
         history
       }
     case 'recognitionDetail':
@@ -341,6 +467,9 @@ async function handle(request: Request): Promise<unknown> {
           : []
       )
       return [...breakTasks]
+    case 'stopAgents':
+      await stopAgents()
+      return true
     case 'shutdown':
       await destroySession()
       return true
