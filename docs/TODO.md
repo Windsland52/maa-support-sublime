@@ -14,7 +14,7 @@
 - [x] 添加 LSP 黑盒测试、Python 插件测试和 CI/Release 工作流
 - [ ] 在真实 Sublime Text + LSP 包 + Maa 项目中完成端到端人工验收
 - [x] 确定公开 GitHub URL，并提供 Package Control 自定义 repository 配置
-- [ ] 创建首个语义版本 Release
+- [x] 创建首个语义版本 Release（`v0.1.0`）
 - [ ] 提交 Package Control 默认 channel
 
 ## MVP 之后
