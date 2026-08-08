@@ -74,6 +74,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 - 同时加载扫描到的所有 interface 项目；
 - 从各项目的 `config/maa_pi_config.json` 读取 controller/resource，resource 无效时使用第一个可用项。
 
+普通 JSON workspace 不会启动 Maa LSP；必须在 workspace 内递归发现 interface 文件，或当前文件的祖先目录中存在 interface 文件。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

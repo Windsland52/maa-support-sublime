@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import sublime
+from LSP.plugin import IsApplicableContext
 from LSP.plugin import LspPlugin
 from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
@@ -13,10 +15,45 @@ PACKAGE_NAME = "LSP-MaaFramework"
 SERVER_FILE = "server.mjs"
 SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
 NODE_VERSION_REQUIREMENT = ">=20.19.0"
+INTERFACE_FILES = {"interface.json", "interface.jsonc"}
+IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
+_known_maa_workspaces: set[Path] = set()
+
+
+def _is_ignored_directory(name: str) -> bool:
+    return name.startswith(".") or name in IGNORED_DIRECTORIES
+
+
+def _workspace_has_interface(root: Path) -> bool:
+    root = root.resolve()
+    if root in _known_maa_workspaces:
+        return True
+    try:
+        for current, directories, files in os.walk(root, followlinks=False):
+            directories[:] = [name for name in directories if not _is_ignored_directory(name)]
+            if INTERFACE_FILES.intersection(files):
+                _known_maa_workspaces.add(root)
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def _file_has_interface_ancestor(file: Path) -> bool:
+    return any(any((parent / name).is_file() for name in INTERFACE_FILES) for parent in file.parents)
 
 
 class LspMaaFrameworkPlugin(LspPlugin):
     """LSP helper package that launches the maa-lsp language server."""
+
+    @classmethod
+    def is_applicable_async(cls, context: IsApplicableContext) -> bool:
+        if not super().is_applicable_async(context):
+            return False
+        if any(_workspace_has_interface(Path(folder.path)) for folder in context.workspace_folders):
+            return True
+        file_name = context.view.file_name()
+        return bool(file_name and _file_has_interface_ancestor(Path(file_name)))
 
     @classmethod
     def on_pre_start_async(cls, context: OnPreStartContext) -> None:

@@ -16,6 +16,10 @@ class FakeSettings:
 
 class FakeLspPlugin:
     @classmethod
+    def is_applicable_async(cls, context):
+        return context.base_applicable
+
+    @classmethod
     def register(cls):
         pass
 
@@ -65,6 +69,7 @@ class PluginTests(unittest.TestCase):
         lsp = types.ModuleType("LSP")
         lsp_plugin = types.ModuleType("LSP.plugin")
         lsp_plugin.LspPlugin = FakeLspPlugin
+        lsp_plugin.IsApplicableContext = object
         lsp_plugin.OnPreStartContext = object
         lsp_plugin.PluginStartError = RuntimeError
         lsp_utils = types.ModuleType("lsp_utils")
@@ -124,6 +129,42 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(context.variables["node_bin"], "managed-node")
         self.assertEqual(context.variables["server_path"], str(server))
         self.assertEqual(context.configuration.env, {"NODE_TEST_RUNTIME": "1"})
+
+    def test_only_applies_to_workspaces_with_recursive_interface(self):
+        workspace = Path(self.temp.name, "workspace")
+        nested = workspace / "apps" / "maa"
+        nested.mkdir(parents=True)
+        (nested / "interface.jsonc").write_text("{}", encoding="utf-8")
+        view = types.SimpleNamespace(file_name=lambda: str(nested / "pipeline.json"))
+        context = types.SimpleNamespace(
+            base_applicable=True,
+            workspace_folders=[types.SimpleNamespace(path=str(workspace))],
+            view=view,
+        )
+
+        self.assertTrue(self.plugin.LspMaaFrameworkPlugin.is_applicable_async(context))
+
+    def test_rejects_generic_json_workspace_and_base_selector_mismatch(self):
+        workspace = Path(self.temp.name, "generic")
+        workspace.mkdir()
+        for ignored in (".hidden", "node_modules", "MaaUtils", "MaaDeps"):
+            ignored_directory = workspace / ignored
+            ignored_directory.mkdir()
+            (ignored_directory / "interface.json").write_text("{}", encoding="utf-8")
+        view = types.SimpleNamespace(file_name=lambda: str(workspace / "data.json"))
+        generic_context = types.SimpleNamespace(
+            base_applicable=True,
+            workspace_folders=[types.SimpleNamespace(path=str(workspace))],
+            view=view,
+        )
+        selector_context = types.SimpleNamespace(
+            base_applicable=False,
+            workspace_folders=[],
+            view=view,
+        )
+
+        self.assertFalse(self.plugin.LspMaaFrameworkPlugin.is_applicable_async(generic_context))
+        self.assertFalse(self.plugin.LspMaaFrameworkPlugin.is_applicable_async(selector_context))
 
 
 if __name__ == "__main__":
