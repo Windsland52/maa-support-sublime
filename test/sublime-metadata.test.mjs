@@ -27,3 +27,21 @@ test('Sublime package exposes a settings command and settings schema', async () 
     'sublime://settings/LSP-MaaFramework#/definitions/PluginConfig'
   )
 })
+
+test('Sublime package leaves optional runtime key bindings disabled', async () => {
+  const source = await readFile(
+    new URL('../pkgs/sublime/Default.sublime-keymap', import.meta.url),
+    'utf8'
+  )
+  const activeBindings = JSON.parse(source.replace(/^\s*\/\/.*$/gm, ''))
+
+  assert.deepEqual(activeBindings, [])
+  for (const command of [
+    'maa_framework_shortcut_start',
+    'maa_framework_shortcut_toggle_pause',
+    'maa_framework_shortcut_stop',
+    'maa_framework_shortcut_screenshot'
+  ]) {
+    assert.match(source, new RegExp(`"command": "${command}"`))
+  }
+})

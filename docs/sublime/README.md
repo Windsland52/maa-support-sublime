@@ -76,6 +76,8 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 `Activate Global Shortcut Target` 把当前 Sublime window 设为运行控制目标。之后同一 Sublime 应用内任意窗口的快捷键都会路由到该目标：
 
+插件不默认注册快捷键；以下条目仅作为 `Default.sublime-keymap` 中的注释示例提供，用户需把需要的绑定复制到 `Preferences: Key Bindings`：
+
 - `Ctrl+Alt+Shift+F5`：Start Queue；
 - `Ctrl+Alt+Shift+F6`：Pause / Continue 切换；
 - `Ctrl+Alt+Shift+F7`：Stop Runtime。
@@ -89,7 +91,7 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 ## 截图与裁剪
 
-`Capture Screenshot` 调用当前 native Controller 的 `post_screencap()`，将 PNG 写入活动项目的 `debug/screenshot/` 并用 Sublime 图片视图打开。`Crop Screenshot…` 依次输入 x、y、width、height；worker 使用 Jimp 校验截图边界并裁剪，结果写入同一目录。两个操作都要求先 Start 以建立 controller 连接，也可从控制面板或浏览器执行面板调用；F8 快捷键按已激活的全局目标窗口路由。
+`Capture Screenshot` 调用当前 native Controller 的 `post_screencap()`，将 PNG 写入活动项目的 `debug/screenshot/` 并用 Sublime 图片视图打开。`Crop Screenshot…` 依次输入 x、y、width、height；worker 使用 Jimp 校验截图边界并裁剪，结果写入同一目录。两个操作都要求先 Start 以建立 controller 连接，也可从控制面板或浏览器执行面板调用；用户启用示例 F8 快捷键后，它会按已激活的全局目标窗口路由。
 
 ## 识别测试
 

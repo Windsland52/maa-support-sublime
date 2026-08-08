@@ -42,6 +42,10 @@ Run `Preferences: LSP-MaaFramework Settings` to edit user settings. Project-spec
 
 The bundled `server.mjs` is used by installed packages. Development checkouts fall back to the adjacent `maa-lsp/dist/server.mjs`; `server_path` can explicitly select another standalone server.
 
+## Optional key bindings
+
+The package does not enable any key bindings by default. `Default.sublime-keymap` contains commented examples for start, pause/continue, stop, and screenshot commands. Copy only the bindings you want into `Preferences: Key Bindings`, then run `MaaFramework: Activate Global Shortcut Target` in the window that should receive them.
+
 ## Project scope
 
 Discovery matches `maa-support-extension`: all workspace folders are scanned recursively for interface files while hidden directories, `node_modules`, `MaaUtils`, and `MaaDeps` are skipped. This plugin implements generic MaaFramework behavior only and deliberately excludes MaaAssistantArknights-specific layouts and expression semantics.
@@ -162,7 +166,7 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 管理员、native debug 和 recognition drawing 均可从控制面板切换。Windows 管理员模式要求以管理员身份运行 Sublime；插件不会绕过 UAC 自动提权。
 
-`Activate Global Shortcut Target` 后，可从任意 Sublime window 使用 `Ctrl+Alt+Shift+F5/F6/F7` 启动、切换暂停和停止目标任务。
+插件默认不启用任何快捷键，避免覆盖用户或其他包的绑定。`Default.sublime-keymap` 提供了已注释的 `Ctrl+Alt+Shift+F5/F6/F7/F8` 示例；用户把需要的条目复制到 `Preferences: Key Bindings` 后，先执行 `Activate Global Shortcut Target`，即可从任意 Sublime window 启动、切换暂停、停止或截图。
 
 `Open Browser Execution Panel` 使用内置 minihtml sheet 显示实时 IPC event，并通过安全的 `subl:` command URL 控制 worker；不开放 localhost 控制端口。
 
