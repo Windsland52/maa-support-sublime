@@ -1,7 +1,9 @@
 node_modules
+__pycache__/
 dist
 release
 *.ps1
+!scripts/test-sublime-ui.ps1
 *.vsix
 .DS_Store
 .claude
