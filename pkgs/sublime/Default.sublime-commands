@@ -76,6 +76,14 @@
     "command": "maa_framework_browser_panel"
   },
   {
+    "caption": "MaaFramework: Capture Screenshot",
+    "command": "maa_framework_screenshot"
+  },
+  {
+    "caption": "MaaFramework: Crop Screenshot",
+    "command": "maa_framework_crop_screenshot"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

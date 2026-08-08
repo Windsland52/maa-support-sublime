@@ -13,5 +13,10 @@
     "keys": ["ctrl+alt+shift+f7"],
     "command": "maa_framework_shortcut_stop",
     "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
+  },
+  {
+    "keys": ["ctrl+alt+shift+f8"],
+    "command": "maa_framework_shortcut_screenshot",
+    "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
   }
 ]

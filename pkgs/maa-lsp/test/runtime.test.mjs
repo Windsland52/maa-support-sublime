@@ -93,17 +93,32 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
       path.join(nativePackage, 'dist', 'index-client.js'),
       `
       class Operation {
-        constructor(succeeded = true, before = null) { this.succeeded = succeeded; this.before = before }
-        async wait() {
-          await this.before
-          await new Promise(resolve => setTimeout(resolve, 10))
-          return this
+        constructor(succeeded = true, before = null, value = null) {
+          this.succeeded = succeeded
+          this.before = before
+          this.value = value
+        }
+        wait() {
+          const pending = (async () => {
+            await this.before
+            await new Promise(resolve => setTimeout(resolve, 10))
+            return this
+          })()
+          pending.get = () => this.value
+          return pending
         }
       }
       class Controller {
         constructor() { this.connected = true }
         add_sink(sink) { this.sink = sink }
         post_connection() { return new Operation() }
+        post_screencap() {
+          return new Operation(
+            true,
+            null,
+            Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEUlEQVR4AWP8DwQMQMDEAAUAPfgEADYYS7QAAAAASUVORK5CYII=', 'base64')
+          )
+        }
         destroy() {}
       }
       class Resource {
@@ -214,6 +229,10 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     assert.equal(detail.result.info.name, 'Entry')
     assert.equal(detail.result.raw, 'data:image/png;base64,AQI=')
     assert.deepEqual(detail.result.draws, ['data:image/png;base64,Aw=='])
+    const screenshot = await client.request('screenshot')
+    assert.match(screenshot.result, /^data:image\/png;base64,/)
+    const crop = await client.request('cropScreenshot', { rect: [0, 0, 1, 1] })
+    assert.match(crop.result, /^data:image\/png;base64,/)
     assert.deepEqual((await client.request('setBreakpoints', { tasks: ['Entry'] })).result, [
       'Entry'
     ])

@@ -1,3 +1,6 @@
+import { createJimp } from '@jimp/core'
+import png from '@jimp/js-png'
+import * as pluginCrop from '@jimp/plugin-crop'
 import { parse } from 'jsonc-parser'
 import { type ChildProcess, spawn } from 'node:child_process'
 import * as fs from 'node:fs/promises'
@@ -47,6 +50,10 @@ let runtimeStatus = 'idle'
 let currentTask: string | null = null
 let breakTasks = new Set<string>()
 const history: Array<{ event: string; params: unknown }> = []
+const Jimp = createJimp({
+  plugins: [pluginCrop.methods],
+  formats: [png]
+})
 
 function send(message: unknown) {
   process.stdout.write(`${JSON.stringify(message)}\n`)
@@ -389,6 +396,34 @@ function imageDataUrl(value: Uint8Array | ArrayBuffer) {
   return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
 }
 
+async function screenshot() {
+  if (!session) {
+    throw new Error('MaaFramework runtime is not started')
+  }
+  const image = await (session.controller as any).post_screencap().wait().get()
+  if (!image) {
+    throw new Error('Controller did not return a screenshot')
+  }
+  return imageDataUrl(image)
+}
+
+async function cropScreenshot(rect: unknown) {
+  if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(value => Number.isInteger(value))) {
+    throw new Error('Crop rectangle must contain four integers')
+  }
+  const [x, y, width, height] = rect as number[]
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+    throw new Error('Crop rectangle must use non-negative coordinates and positive dimensions')
+  }
+  const source = await screenshot()
+  const image = await Jimp.read(Buffer.from(source.slice(source.indexOf(',') + 1), 'base64'))
+  if (x + width > image.width || y + height > image.height) {
+    throw new Error(`Crop rectangle exceeds screenshot bounds ${image.width}x${image.height}`)
+  }
+  image.crop({ x, y, w: width, h: height })
+  return imageDataUrl(await image.getBuffer('image/png'))
+}
+
 function recognitionDetail(id: unknown) {
   if (!session || (typeof id !== 'string' && typeof id !== 'number')) {
     return null
@@ -460,6 +495,10 @@ async function handle(request: Request): Promise<unknown> {
       return session && typeof request.params?.task === 'string'
         ? ((session.resource as any).get_node_data(request.params.task) ?? null)
         : null
+    case 'screenshot':
+      return screenshot()
+    case 'cropScreenshot':
+      return cropScreenshot(request.params?.rect)
     case 'setBreakpoints':
       breakTasks = new Set(
         Array.isArray(request.params?.tasks)

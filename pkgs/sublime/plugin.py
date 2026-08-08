@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import html
 import json
 import os
@@ -50,9 +51,11 @@ class MaaRuntimeManager:
         self.history = []
         self.latest_recognition = None
         self.latest_action = None
+        self.project = None
 
     def start(self, project: Path, window) -> None:
         self.window = window
+        self.project = project
         try:
             settings = sublime.load_settings(SETTINGS_FILE)
             if settings.get("admin_mode", False) and os.name == "nt" and not _is_admin():
@@ -153,6 +156,41 @@ class MaaRuntimeManager:
     def set_breakpoints(self, tasks: list[str]) -> None:
         if self.process and self.process.poll() is None:
             self.request("setBreakpoints", {"tasks": tasks}, lambda _result: None)
+
+    def capture(self, window) -> None:
+        self._request_image(window, "screenshot", {}, "screenshot")
+
+    def crop(self, window, rect: list[int]) -> None:
+        self._request_image(window, "cropScreenshot", {"rect": rect}, "crop")
+
+    def _request_image(self, window, method: str, params: dict[str, Any], label: str) -> None:
+        if not self.process or self.process.poll() is not None:
+            sublime.status_message("MaaFramework: runtime is not running")
+            return
+        self.request(
+            method,
+            params,
+            lambda result: self._save_image(window, label, result),
+        )
+
+    def _save_image(self, window, label: str, result: Any) -> None:
+        if not isinstance(result, str) or not result.startswith("data:image/png;base64,"):
+            sublime.status_message("MaaFramework: runtime returned an invalid PNG image")
+            return
+        try:
+            image = base64.b64decode(result.partition(",")[2], validate=True)
+            root = (
+                self.project / "debug" / "screenshot"
+                if self.project is not None
+                else Path(sublime.cache_path()) / PACKAGE_NAME / "screenshot"
+            )
+            root.mkdir(parents=True, exist_ok=True)
+            target = root / f"{label}-{uuid.uuid4().hex[:12]}.png"
+            target.write_bytes(image)
+            window.open_file(str(target))
+            sublime.status_message(f"MaaFramework: saved {target}")
+        except Exception as error:
+            sublime.status_message(f"MaaFramework: cannot save image: {error}")
 
     def request(self, method: str, params: dict[str, Any], callback) -> None:
         process = self.process
@@ -387,6 +425,8 @@ class MaaShortcutController:
             )
         elif command == "stop":
             _runtime_manager.control("stop")
+        elif command == "screenshot":
+            window.run_command("maa_framework_screenshot")
 
 
 _shortcut_controller = MaaShortcutController()
@@ -401,6 +441,8 @@ def _control_panel_html() -> str:
         ("Stop", "maa_framework_stop"),
         ("Status JSON", "maa_framework_runtime_status"),
         ("Latest Detail", "maa_framework_runtime_detail"),
+        ("Screenshot", "maa_framework_screenshot"),
+        ("Crop", "maa_framework_crop_screenshot"),
         ("Refresh", "maa_framework_browser_panel_refresh"),
     ]
     controls = " ".join(
@@ -993,6 +1035,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Stop Agent Processes",
             "Show Runtime Status…",
             "Show Latest Recognition / Action Detail…",
+            "Capture Screenshot",
+            "Crop Screenshot…",
             "Manage Task Breakpoints…",
             "Select MaaFramework Version…",
             "Select npm Registry…",
@@ -1018,6 +1062,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_stop_agents",
             "maa_framework_runtime_status",
             "maa_framework_runtime_detail",
+            "maa_framework_screenshot",
+            "maa_framework_crop_screenshot",
             "maa_framework_breakpoints",
             "maa_framework_select_version",
             "maa_framework_select_registry",
@@ -1085,6 +1131,46 @@ class MaaFrameworkRuntimeStatusCommand(sublime_plugin.WindowCommand):
 class MaaFrameworkRuntimeDetailCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         _runtime_manager.show_latest_detail(self.window)
+
+
+class MaaFrameworkScreenshotCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _runtime_manager.capture(self.window)
+
+
+class MaaFrameworkCropScreenshotCommand(sublime_plugin.WindowCommand):
+    fields = [("x", "0"), ("y", "0"), ("width", "128"), ("height", "128")]
+
+    def run(self) -> None:
+        self._rect = []
+        self._ask(0)
+
+    def _ask(self, index: int) -> None:
+        if index == len(self.fields):
+            _runtime_manager.crop(self.window, self._rect)
+            return
+        name, initial = self.fields[index]
+        self.window.show_input_panel(
+            f"Crop {name}",
+            initial,
+            lambda value: self._on_value(index, value),
+            None,
+            None,
+        )
+
+    def _on_value(self, index: int, value: str) -> None:
+        try:
+            parsed = int(value)
+        except ValueError:
+            sublime.status_message(f"MaaFramework: crop {self.fields[index][0]} must be an integer")
+            return
+        if parsed < 0 or (index >= 2 and parsed == 0):
+            sublime.status_message(
+                "MaaFramework: crop coordinates must be non-negative and dimensions positive"
+            )
+            return
+        self._rect.append(parsed)
+        self._ask(index + 1)
 
 
 class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
@@ -1247,6 +1333,11 @@ class MaaFrameworkShortcutTogglePauseCommand(sublime_plugin.WindowCommand):
 class MaaFrameworkShortcutStopCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         _shortcut_controller.route("stop")
+
+
+class MaaFrameworkShortcutScreenshotCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _shortcut_controller.route("screenshot")
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):

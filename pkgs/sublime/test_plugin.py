@@ -66,6 +66,8 @@ class FakeRuntimeManager:
         self.controls = []
         self.shown = []
         self.breakpoints = []
+        self.captures = []
+        self.crops = []
         self.shutdown_count = 0
         self.state = "idle"
         self.history = []
@@ -84,6 +86,12 @@ class FakeRuntimeManager:
 
     def set_breakpoints(self, tasks):
         self.breakpoints.append(tasks)
+
+    def capture(self, window):
+        self.captures.append(window)
+
+    def crop(self, window, rect):
+        self.crops.append((window, rect))
 
     def fetch_versions(self, callback):
         callback(["5.12.2", "5.11.0"], {"5.11.0"})
@@ -186,6 +194,7 @@ class FakeWindow:
         self.opened = None
         self.ran_command = None
         self.html_sheet = None
+        self.input_values = []
         self._id = FakeWindow.next_id
         FakeWindow.next_id += 1
 
@@ -202,8 +211,11 @@ class FakeWindow:
     def active_view(self):
         return self._views[0] if self._views else None
 
-    def open_file(self, file_name, flags):
+    def open_file(self, file_name, flags=0):
         self.opened = (file_name, flags)
+
+    def show_input_panel(self, _caption, initial, on_done, _on_change, _on_cancel):
+        on_done(self.input_values.pop(0) if self.input_values else initial)
 
     def new_file(self):
         view = FakeView(None, self)
@@ -641,6 +653,8 @@ class PluginTests(unittest.TestCase):
                 "Stop Agent Processes",
                 "Show Runtime Status…",
                 "Show Latest Recognition / Action Detail…",
+                "Capture Screenshot",
+                "Crop Screenshot…",
                 "Manage Task Breakpoints…",
                 "Select MaaFramework Version…",
                 "Select npm Registry…",
@@ -654,7 +668,7 @@ class PluginTests(unittest.TestCase):
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(15)
+        window.on_done(17)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -685,10 +699,15 @@ class PluginTests(unittest.TestCase):
         self.plugin.MaaFrameworkStopAgentsCommand(window).run()
         self.plugin.MaaFrameworkRuntimeStatusCommand(window).run()
         self.plugin.MaaFrameworkRuntimeDetailCommand(window).run()
+        self.plugin.MaaFrameworkScreenshotCommand(window).run()
+        window.input_values = ["10", "20", "100", "80"]
+        self.plugin.MaaFrameworkCropScreenshotCommand(window).run()
 
         self.assertEqual(runtime.started, (project, window))
         self.assertEqual(runtime.controls, ["pause", "continue", "stop", "stopAgents"])
         self.assertEqual(runtime.shown, [("status", window), ("detail", window)])
+        self.assertEqual(runtime.captures, [window])
+        self.assertEqual(runtime.crops, [(window, [10, 20, 100, 80])])
 
     def test_toggles_project_task_breakpoints_and_syncs_runtime(self):
         project = Path(self.temp.name, "workspace", "demo")
@@ -777,11 +796,13 @@ class PluginTests(unittest.TestCase):
 
         self.plugin.MaaFrameworkActivateShortcutsCommand(target).run()
         self.plugin.MaaFrameworkShortcutStartCommand(source).run()
+        self.assertEqual(target.ran_command, ("maa_framework_start", None))
         self.plugin.MaaFrameworkShortcutTogglePauseCommand(source).run()
         self.plugin.MaaFrameworkShortcutStopCommand(source).run()
+        self.plugin.MaaFrameworkShortcutScreenshotCommand(source).run()
 
-        self.assertEqual(target.ran_command, ("maa_framework_start", None))
         self.assertEqual(runtime.controls, ["continue", "stop"])
+        self.assertEqual(target.ran_command, ("maa_framework_screenshot", None))
 
     def test_opens_browser_execution_panel_with_sublime_ipc_links(self):
         window = FakeWindow([self.temp.name])

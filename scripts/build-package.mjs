@@ -1,5 +1,6 @@
 import JSZip from 'jszip'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { builtinModules } from 'node:module'
 import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -39,7 +40,7 @@ for (const bundled of [serverSource, runtimeSource]) {
   const source = await readFile(bundled, 'utf8')
   const externalImports = [...source.matchAll(/^import .*? from ["']([^"']+)["'];?$/gm)]
     .map(match => match[1])
-    .filter(specifier => !specifier.startsWith('node:'))
+    .filter(specifier => !specifier.startsWith('node:') && !builtinModules.includes(specifier))
   if (externalImports.length > 0) {
     throw new Error(`${path.basename(bundled)} is not standalone: ${externalImports.join(', ')}`)
   }

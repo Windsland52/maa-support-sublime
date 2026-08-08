@@ -77,12 +77,17 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 - `Ctrl+Alt+Shift+F5`：Start Queue；
 - `Ctrl+Alt+Shift+F6`：Pause / Continue 切换；
 - `Ctrl+Alt+Shift+F7`：Stop Runtime。
+- `Ctrl+Alt+Shift+F8`：Capture Screenshot。
 
 这里的“全局”与相邻扩展一致，指编辑器多窗口间的目标路由；Sublime 失去系统焦点后不会安装操作系统级键盘 hook。用户可在 User keymap 覆盖按键，命令名保持稳定。
 
 ## 浏览器执行面板
 
 `Open Browser Execution Panel` 创建 Sublime Text 4 minihtml sheet，显示 worker 状态与最近 50 条 IPC event。Start/Pause/Continue/Stop、状态 JSON、最新 native detail 和 Refresh 均使用 Sublime 原生 `subl:` command URL 回到 WindowCommand，再进入逐行 JSON worker IPC。面板不启动 localhost server、不执行任意 JavaScript，也不向外部浏览器暴露控制端口；runtime event 到达时自动刷新已打开的 sheet。
+
+## 截图与裁剪
+
+`Capture Screenshot` 调用当前 native Controller 的 `post_screencap()`，将 PNG 写入活动项目的 `debug/screenshot/` 并用 Sublime 图片视图打开。`Crop Screenshot…` 依次输入 x、y、width、height；worker 使用 Jimp 校验截图边界并裁剪，结果写入同一目录。两个操作都要求先 Start 以建立 controller 连接，也可从控制面板或浏览器执行面板调用；F8 快捷键按已激活的全局目标窗口路由。
 
 ## 包名迁移
 
