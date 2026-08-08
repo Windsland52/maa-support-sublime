@@ -59,16 +59,18 @@ export function packageTagForVersion(version) {
   return `sublime-v${version}`
 }
 
+export function validatePublishRef(version, releaseRef, pushRemote) {
+  if (pushRemote && releaseRef && releaseRef !== `v${version}`) {
+    throw new Error(`release ref ${releaseRef} does not match package version ${version}`)
+  }
+}
+
 export async function publishPackageTag({ pushRemote = null } = {}) {
   const packageJson = JSON.parse(
     await readFile(path.join(root, 'pkgs', 'maa-lsp', 'package.json'), 'utf8')
   )
   const tag = packageTagForVersion(packageJson.version)
-  if (process.env.GITHUB_REF_NAME && process.env.GITHUB_REF_NAME !== `v${packageJson.version}`) {
-    throw new Error(
-      `release ref ${process.env.GITHUB_REF_NAME} does not match package version ${packageJson.version}`
-    )
-  }
+  validatePublishRef(packageJson.version, process.env.GITHUB_REF_NAME, pushRemote)
   if (pushRemote && remoteHasTag(pushRemote, tag)) {
     console.log(`${tag} already exists on ${pushRemote}; leaving the immutable tag unchanged`)
     return { tag, skipped: true }
