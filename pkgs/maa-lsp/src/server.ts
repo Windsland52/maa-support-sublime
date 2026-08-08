@@ -15,6 +15,8 @@ import {
   MessageType,
   Range,
   ShowMessageNotification,
+  type SymbolInformation,
+  SymbolKind,
   TextDocumentSyncKind,
   TextDocuments,
   TextEdit,
@@ -894,6 +896,7 @@ connection.onInitialize(params => {
       definitionProvider: true,
       hoverProvider: true,
       referencesProvider: true,
+      workspaceSymbolProvider: true,
       workspace: {
         workspaceFolders: {
           supported: true,
@@ -1004,6 +1007,31 @@ connection.onReferences(async params => {
   return Promise.all(
     matches.map(match => toLocation(match.file, match.location.offset, match.location.length))
   )
+})
+
+connection.onWorkspaceSymbol(async params => {
+  const query = params.query.toLowerCase()
+  const symbols: SymbolInformation[] = []
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    for (const decl of project.bundle.info.layer.mergedAllDecls) {
+      if (
+        decl.type !== 'task.decl' ||
+        decl.task.startsWith('$') ||
+        !decl.task.toLowerCase().includes(query)
+      ) {
+        continue
+      }
+      const location = await toLocation(decl.file, decl.location.offset, decl.location.length)
+      symbols.push({
+        name: decl.task,
+        kind: SymbolKind.Class,
+        location,
+        containerName: `${path.basename(decl.file)}:${location.range.start.line + 1}`
+      })
+    }
+  }
+  return symbols
 })
 
 connection.onDefinition(async params => {

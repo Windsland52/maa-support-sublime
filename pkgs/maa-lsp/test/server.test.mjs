@@ -151,6 +151,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.equal(initialized.result.capabilities.definitionProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
+    assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
 
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
     const loaded = await client.waitFor(
@@ -656,6 +657,14 @@ test('completes pipeline tasks and interface references', async () => {
       context: { includeDeclaration: false }
     })
     assert.equal(interfaceReferencesOnly.result.length, 1)
+
+    const symbols = await client.request('workspace/symbol', { query: 'existing' })
+    assert.deepEqual(
+      symbols.result.map(symbol => symbol.name),
+      ['ExistingTask']
+    )
+    assert.equal(symbols.result[0].kind, 5)
+    assert.match(symbols.result[0].containerName, /^tasks\.json:\d+$/)
 
     await client.shutdown()
     client = undefined

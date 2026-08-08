@@ -48,6 +48,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Completion（任务、锚点、图片、locale 与 interface 引用）
 - Definition
 - References（pipeline 与 interface 声明/引用）
+- Workspace Symbol（跨项目任务名搜索）
 - Hover
 - Multi-root workspace
 
