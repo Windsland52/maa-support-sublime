@@ -30,5 +30,9 @@
   {
     "caption": "MaaFramework: Reload Projects and Config",
     "command": "maa_framework_reload"
+  },
+  {
+    "caption": "MaaFramework: Check Environment",
+    "command": "maa_framework_check_environment"
   }
 ]

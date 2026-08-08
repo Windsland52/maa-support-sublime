@@ -46,6 +46,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 `MaaFramework: Reload Projects and Config` 发送 `maa/reloadProjects`，重新扫描全部 workspace folder，并重新加载 interface、`maatools.config.mts`、`maa_pi_config.json` 和各自 watcher。命令完成后刷新状态栏并显示加载成功的项目数。
 
+`MaaFramework: Check Environment` 在异步线程检查 Sublime Text 4、LSP 包、可执行的 Node `>=20.19.0`、内置 server、workspace 中的 interface 数量，以及 interface / `maa_pi_config.json` 语法。结果写入只读临时报告，以 `[OK]`、`[WARN]`、`[FAIL]` 和最终 PASS/FAIL 标识，便于复制到 issue。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

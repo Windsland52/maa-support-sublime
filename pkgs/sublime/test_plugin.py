@@ -61,6 +61,9 @@ class FakeNodeRunner:
     def node_binary_path(self):
         return Path("managed-node")
 
+    def resolve_version(self):
+        return "24.0.0"
+
 
 class FakeNodeManager:
     calls = []
@@ -173,6 +176,15 @@ class FakeSublime(types.ModuleType):
 
     def set_timeout(self, callback, _delay=0):
         callback()
+
+    def set_timeout_async(self, callback, _delay=0):
+        callback()
+
+    def version(self):
+        return "4200"
+
+    def find_resources(self, pattern):
+        return ["Packages/LSP/LSP.sublime-settings"] if pattern == "LSP.sublime-settings" else []
 
 
 class PluginTests(unittest.TestCase):
@@ -487,6 +499,32 @@ class PluginTests(unittest.TestCase):
             "MaaFramework: reloaded 2 interface projects",
             self.sublime.messages,
         )
+
+    def test_reports_a_complete_working_environment(self):
+        workspace = Path(self.temp.name, "workspace")
+        workspace.mkdir()
+        (workspace / "interface.jsonc").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        config = workspace / "config" / "maa_pi_config.json"
+        config.parent.mkdir()
+        config.write_text('{"resource":"Default"}', encoding="utf-8")
+        server = Path(self.temp.name, "server.mjs")
+        server.write_text("", encoding="utf-8")
+        self.sublime.settings.values["server_path"] = str(server)
+        window = FakeWindow([str(workspace)])
+
+        self.plugin.MaaFrameworkCheckEnvironmentCommand(window).run()
+
+        output = window._views[-1]
+        self.assertEqual(output.name, "LSP-MaaFramework Environment Check")
+        self.assertIn("[OK] Sublime Text build 4200", output.content)
+        self.assertIn("[OK] LSP package is installed", output.content)
+        self.assertIn("[OK] Node.js 24.0.0: managed-node", output.content)
+        self.assertIn("[OK] discovered 1 interface project(s)", output.content)
+        self.assertTrue(output.content.endswith("Result: PASS\n"))
+        self.assertTrue(output.read_only)
 
 
 if __name__ == "__main__":

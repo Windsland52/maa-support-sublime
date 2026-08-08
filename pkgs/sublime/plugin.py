@@ -356,6 +356,73 @@ def _display_path(file: Path, project: Path) -> Path:
         return file
 
 
+def _environment_report(window) -> str:
+    lines = ["LSP-MaaFramework Environment Check", ""]
+    failed = False
+
+    try:
+        build = int(sublime.version())
+    except (TypeError, ValueError):
+        build = 0
+    if build >= 4000:
+        lines.append(f"[OK] Sublime Text build {build}")
+    else:
+        lines.append(f"[FAIL] Sublime Text 4 is required (current build: {build or 'unknown'})")
+        failed = True
+
+    if sublime.find_resources("LSP.sublime-settings"):
+        lines.append("[OK] LSP package is installed")
+    else:
+        lines.append("[FAIL] LSP package is not installed")
+        failed = True
+
+    server = LspMaaFrameworkPlugin._resolve_server_path()
+    if server:
+        lines.append(f"[OK] maa-lsp server: {server}")
+    else:
+        lines.append("[FAIL] bundled maa-lsp server is unavailable")
+        failed = True
+
+    try:
+        node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
+        lines.append(
+            f"[OK] Node.js {node.resolve_version()}: {node.node_binary_path()}"
+        )
+    except Exception as error:
+        lines.append(f"[FAIL] Node.js {NODE_VERSION_REQUIREMENT}: {error}")
+        failed = True
+
+    interfaces = [
+        interface_file
+        for folder in window.folders()
+        for interface_file in _iter_interface_files(Path(folder))
+    ]
+    if interfaces:
+        lines.append(f"[OK] discovered {len(interfaces)} interface project(s)")
+    else:
+        lines.append("[WARN] no interface.json or interface.jsonc found in open folders")
+    for interface_file in interfaces:
+        if _load_json_object(interface_file) is None:
+            lines.append(f"[FAIL] invalid interface JSONC: {interface_file}")
+            failed = True
+        config_file = interface_file.parent / "config" / "maa_pi_config.json"
+        if config_file.is_file() and _load_json_object(config_file) is None:
+            lines.append(f"[FAIL] invalid project config JSON: {config_file}")
+            failed = True
+
+    lines.extend(["", f"Result: {'FAIL' if failed else 'PASS'}"])
+    return "\n".join(lines) + "\n"
+
+
+def _show_report(window, name: str, content: str) -> None:
+    output = window.new_file()
+    output.set_name(name)
+    output.set_scratch(True)
+    output.assign_syntax("Packages/Text/Plain text.tmLanguage")
+    output.run_command("append", {"characters": content})
+    output.set_read_only(True)
+
+
 class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
     config_key = ""
     interface_field = ""
@@ -537,6 +604,21 @@ class MaaFrameworkReloadCommand(LspTextCommand):
     def _show_error(error: Any) -> None:
         message = error.get("message", error) if isinstance(error, dict) else error
         sublime.status_message(f"MaaFramework: project reload failed: {message}")
+
+
+class MaaFrameworkCheckEnvironmentCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        sublime.set_timeout_async(self._check)
+
+    def _check(self) -> None:
+        report = _environment_report(self.window)
+        sublime.set_timeout(
+            lambda: _show_report(
+                self.window,
+                "LSP-MaaFramework Environment Check",
+                report,
+            )
+        )
 
 
 class MaaFrameworkProjectStatusListener(sublime_plugin.EventListener):

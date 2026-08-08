@@ -94,6 +94,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `MaaFramework: Reload Projects and Config` 主动重扫 workspace，并重新加载 interface、`maatools.config.mts` 与项目选择配置。
 
+`MaaFramework: Check Environment` 检查 Sublime/LSP、Node、内置 server 和项目 JSON 配置，生成可复制的只读 PASS/FAIL 报告。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

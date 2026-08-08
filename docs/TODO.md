@@ -58,7 +58,7 @@
 - [x] Goto Task
 - [x] task 求值；~~expression 求值~~（仅 MaaAssistantArknights 使用，不在本插件范围）
 - [x] 手动重载项目和配置
-- [ ] 运行环境检查
+- [x] 运行环境检查
 
 ## MaaFramework 运行与调试
 
