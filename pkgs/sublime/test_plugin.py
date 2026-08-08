@@ -131,6 +131,7 @@ class FakeWindow:
         self.on_done = None
         self._views = []
         self.opened = None
+        self.ran_command = None
 
     def folders(self):
         return self._folders
@@ -152,6 +153,9 @@ class FakeWindow:
         view = FakeView(None, self)
         self._views.append(view)
         return view
+
+    def run_command(self, command, args=None):
+        self.ran_command = (command, args)
 
 
 class FakeSublime(types.ModuleType):
@@ -525,6 +529,50 @@ class PluginTests(unittest.TestCase):
         self.assertIn("[OK] discovered 1 interface project(s)", output.content)
         self.assertTrue(output.content.endswith("Result: PASS\n"))
         self.assertTrue(output.read_only)
+
+    def test_control_panel_adds_and_removes_persistent_queue_tasks(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            """
+            {
+                "resource": [{ "name": "Default", "path": "resource" }],
+                "task": [{ "name": "Daily", "entry": "Entry" }]
+            }
+            """,
+            encoding="utf-8",
+        )
+        config_file = project / "config" / "maa_pi_config.json"
+        config_file.parent.mkdir()
+        config_file.write_text('{"resource":"Default","task":[]}', encoding="utf-8")
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+
+        add = self.plugin.MaaFrameworkAddTaskCommand(window)
+        add.run()
+        self.assertEqual(window.labels, ["Daily — Entry"])
+        window.on_done(0)
+        config = json.loads(config_file.read_text(encoding="utf-8"))
+        self.assertEqual(config["task"][0]["name"], "Daily")
+        self.assertTrue(config["task"][0]["__key"])
+
+        panel = self.plugin.MaaFrameworkControlPanelCommand(window)
+        panel.run()
+        self.assertEqual(
+            window.labels,
+            ["Add Task to Queue…", "Remove Task from Queue…", "Queue 1: Daily"],
+        )
+        window.on_done(0)
+        self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
+
+        remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
+        remove.run()
+        self.assertEqual(window.labels, ["Queue 1: Daily"])
+        window.on_done(0)
+        config = json.loads(config_file.read_text(encoding="utf-8"))
+        self.assertEqual(config["task"], [])
 
 
 if __name__ == "__main__":

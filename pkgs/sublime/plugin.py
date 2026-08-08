@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -153,6 +154,34 @@ def _interface_values(interface: dict[str, Any], field: str) -> list[str]:
     ]
 
 
+def _project_interface(project: Path) -> dict[str, Any]:
+    interface_file = next(
+        (project / name for name in sorted(INTERFACE_FILES) if (project / name).is_file()),
+        None,
+    )
+    return (_load_json_object(interface_file) if interface_file else None) or {}
+
+
+def _project_config(project: Path) -> Optional[dict[str, Any]]:
+    config_file = project / "config" / "maa_pi_config.json"
+    return _load_json_object(config_file) if config_file.is_file() else {}
+
+
+def _write_project_config(project: Path, config: dict[str, Any]) -> Optional[str]:
+    config_file = project / "config" / "maa_pi_config.json"
+    try:
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        temporary = config_file.with_suffix(".json.tmp")
+        temporary.write_text(
+            json.dumps(config, ensure_ascii=False, indent=4) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(config_file)
+        return None
+    except OSError as error:
+        return str(error)
+
+
 def _project_for_file(file: Path) -> Optional[Path]:
     for parent in file.resolve().parents:
         if any((parent / name).is_file() for name in INTERFACE_FILES):
@@ -164,13 +193,8 @@ def _project_status(file: Path) -> Optional[str]:
     project = _project_for_file(file)
     if project is None:
         return None
-    interface_file = next(
-        (project / name for name in sorted(INTERFACE_FILES) if (project / name).is_file()),
-        None,
-    )
-    interface = _load_json_object(interface_file) if interface_file else {}
-    interface = interface or {}
-    config = _load_json_object(project / "config" / "maa_pi_config.json") or {}
+    interface = _project_interface(project)
+    config = _project_config(project) or {}
     project_name = interface.get("name")
     if not isinstance(project_name, str) or not project_name:
         project_name = project.name
@@ -283,17 +307,13 @@ def _top_level_key_lines(text: str) -> list[tuple[str, int]]:
 
 
 def _pipeline_files(project: Path) -> list[Path]:
-    interface_file = next(
-        (project / name for name in sorted(INTERFACE_FILES) if (project / name).is_file()),
-        None,
-    )
-    interface = _load_json_object(interface_file) if interface_file else None
+    interface = _project_interface(project)
     if not interface:
         return []
     resources = interface.get("resource")
     if not isinstance(resources, list) or not resources:
         return []
-    config = _load_json_object(project / "config" / "maa_pi_config.json") or {}
+    config = _project_config(project) or {}
     selected = config.get("resource")
     resource = next(
         (
@@ -452,22 +472,15 @@ class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
             return
         project, value = self._choices[index]
         config_file = project / "config" / "maa_pi_config.json"
-        config = _load_json_object(config_file) if config_file.is_file() else {}
+        config = _project_config(project)
         if config is None:
             sublime.status_message(
                 f"MaaFramework: cannot update invalid config {config_file}"
             )
             return
         config[self.config_key] = value
-        try:
-            config_file.parent.mkdir(parents=True, exist_ok=True)
-            temporary = config_file.with_suffix(".json.tmp")
-            temporary.write_text(
-                json.dumps(config, ensure_ascii=False, indent=4) + "\n",
-                encoding="utf-8",
-            )
-            temporary.replace(config_file)
-        except OSError as error:
+        error = _write_project_config(project, config)
+        if error:
             sublime.status_message(f"MaaFramework: cannot update selection: {error}")
             return
         _refresh_window_statuses(self.window)
@@ -490,6 +503,128 @@ class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelectCommand):
     config_key = "__locale"
     interface_field = "languages"
     item_name = "locale"
+
+
+class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message(
+                "MaaFramework: open a file in a project before opening the control panel"
+            )
+            return
+        config = _project_config(project)
+        if config is None:
+            sublime.status_message("MaaFramework: cannot read invalid project config")
+            return
+        tasks = config.get("task")
+        tasks = tasks if isinstance(tasks, list) else []
+        self._project = project
+        self._queued_tasks = [
+            task for task in tasks if isinstance(task, dict) and isinstance(task.get("name"), str)
+        ]
+        labels = ["Add Task to Queue…", "Remove Task from Queue…"]
+        labels.extend(
+            f"Queue {index + 1}: {task['name']}" for index, task in enumerate(self._queued_tasks)
+        )
+        self.window.show_quick_panel(labels, self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if index == 0:
+            self.window.run_command("maa_framework_add_task")
+        elif index == 1:
+            self.window.run_command("maa_framework_remove_task")
+        elif 2 <= index < len(self._queued_tasks) + 2:
+            task_name = self._queued_tasks[index - 2]["name"]
+            locations = [task for task in _project_tasks(self._project) if task[0] == task_name]
+            if locations:
+                _, file, line = locations[0]
+                self.window.open_file(f"{file}:{line + 1}:1", sublime.ENCODED_POSITION)
+
+
+class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        self._project = _active_project(self.window)
+        if self._project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        entries = _project_interface(self._project).get("task")
+        if not isinstance(entries, list):
+            entries = []
+        self._tasks = [
+            entry
+            for entry in entries
+            if isinstance(entry, dict)
+            and isinstance(entry.get("name"), str)
+            and isinstance(entry.get("entry"), str)
+        ]
+        if not self._tasks:
+            sublime.status_message("MaaFramework: no interface tasks found")
+            return
+        self.window.show_quick_panel(
+            [f"{task['name']} — {task['entry']}" for task in self._tasks],
+            self._on_done,
+        )
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._tasks):
+            return
+        config = _project_config(self._project)
+        if config is None:
+            sublime.status_message("MaaFramework: cannot update invalid project config")
+            return
+        queue = config.get("task")
+        if not isinstance(queue, list):
+            queue = []
+        task = self._tasks[index]
+        queue.append({"name": task["name"], "__key": str(uuid.uuid4())})
+        config["task"] = queue
+        error = _write_project_config(self._project, config)
+        if error:
+            sublime.status_message(f"MaaFramework: cannot add queued task: {error}")
+            return
+        sublime.status_message(f"MaaFramework: queued task {task['name']}")
+
+
+class MaaFrameworkRemoveTaskCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        self._project = _active_project(self.window)
+        if self._project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        config = _project_config(self._project)
+        if config is None:
+            sublime.status_message("MaaFramework: cannot update invalid project config")
+            return
+        tasks = config.get("task")
+        self._tasks = tasks if isinstance(tasks, list) else []
+        if not self._tasks:
+            sublime.status_message("MaaFramework: task queue is empty")
+            return
+        self.window.show_quick_panel(
+            [
+                f"Queue {index + 1}: {task.get('name', '<invalid>')}"
+                if isinstance(task, dict)
+                else f"Queue {index + 1}: <invalid>"
+                for index, task in enumerate(self._tasks)
+            ],
+            self._on_done,
+        )
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._tasks):
+            return
+        removed = self._tasks.pop(index)
+        config = _project_config(self._project)
+        if config is None:
+            return
+        config["task"] = self._tasks
+        error = _write_project_config(self._project, config)
+        if error:
+            sublime.status_message(f"MaaFramework: cannot remove queued task: {error}")
+            return
+        name = removed.get("name", "<invalid>") if isinstance(removed, dict) else "<invalid>"
+        sublime.status_message(f"MaaFramework: removed queued task {name}")
 
 
 class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):

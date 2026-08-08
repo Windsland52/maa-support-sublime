@@ -12,6 +12,10 @@
     "command": "maa_framework_select_controller"
   },
   {
+    "caption": "MaaFramework: Control Panel",
+    "command": "maa_framework_control_panel"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

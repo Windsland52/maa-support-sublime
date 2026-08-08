@@ -96,6 +96,10 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `MaaFramework: Check Environment` 检查 Sublime/LSP、Node、内置 server 和项目 JSON 配置，生成可复制的只读 PASS/FAIL 报告。
 
+## 控制面板
+
+`MaaFramework: Control Panel` 管理 `maa_pi_config.json` 中的持久化任务队列。可以从 interface task 中添加、删除队列实例，或选择队列项跳到对应 pipeline entry。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |
