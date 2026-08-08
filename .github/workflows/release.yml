@@ -38,3 +38,9 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" release/LSP-MaaFramework.sublime-package --generate-notes
           fi
+      - name: Publish package-only tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh auth setup-git
+          pnpm package-tag:sublime -- --push "https://github.com/${GITHUB_REPOSITORY}.git"

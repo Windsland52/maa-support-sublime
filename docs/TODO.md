@@ -24,6 +24,7 @@
 - [x] 仅在 Maa 项目中启动 LSP
 - [x] 完成 Package Control reviewer 检查
 - [x] 提交 Package Control 默认 channel（[`sublimelsp/repository#169`](https://github.com/sublimelsp/repository/pull/169)）
+- [x] 使用 package-only tag 自动向 Package Control 发布后续版本
 
 ## 配置正确性
 

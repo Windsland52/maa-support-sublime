@@ -10,11 +10,8 @@
       "labels": ["lsp", "linting", "code navigation", "utilities"],
       "releases": [
         {
-          "version": "0.3.0",
-          "url": "https://github.com/Windsland52/maa-support-sublime/releases/download/v0.3.0/LSP-MaaFramework.sublime-package",
-          "date": "2026-08-08 15:27:04",
           "sublime_text": ">=4000",
-          "platforms": ["*"]
+          "tags": "sublime-v"
         }
       ]
     }
