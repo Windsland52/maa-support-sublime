@@ -28,6 +28,10 @@ workspace folder 增删或客户端报告 interface 文件新增/删除时会重
 
 每次扫描按 URI 记录完整诊断指纹；内容未变化时不重复发送 `publishDiagnostics`。诊断新增、修改、清空以及项目卸载仍会正常通知客户端。
 
+## 稳定性验收
+
+LSP 黑盒测试包含 64 个 pipeline 文件、2048 个任务的大型项目 fixture。测试要求初始化并完成全量 Workspace Symbol 查询不超过 15 秒，修改 `maatools.config.mts` 后重建项目并应用新诊断级别不超过 15 秒，单个 pipeline 文件增量热更新并发布诊断不超过 5 秒。时间上限覆盖 Windows 和 GitHub Actions 的共享 CI 环境，测试同时断言索引数量与热更新后的实际诊断内容，避免只记录无功能意义的 benchmark 数字。
+
 ## 资源选择
 
 每个项目读取 interface 同级的 `config/maa_pi_config.json`：

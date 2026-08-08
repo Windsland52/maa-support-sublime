@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
+import { performance } from 'node:perf_hooks'
 import { test } from 'node:test'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -113,6 +114,14 @@ async function addInterface(root, relative) {
 function positionAtOffset(content, offset) {
   const before = content.slice(0, offset).split('\n')
   return { line: before.length - 1, character: before.at(-1).length }
+}
+
+function uriTargetsFile(uri, file) {
+  const normalize = value => {
+    const normalized = path.normalize(value)
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+  }
+  return normalize(fileURLToPath(uri)) === normalize(file)
 }
 
 function offsetAtPosition(content, position) {
@@ -599,6 +608,153 @@ test('hot reloads resource selection from config/maa_pi_config.json', async () =
     assert.deepEqual(
       published.params.diagnostics.map(diagnostic => diagnostic.message),
       ['未知任务 OnlyInSecond']
+    )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('keeps a large project responsive across config and pipeline hot reloads', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-large-project-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const configFile = path.join(workspace, 'maatools.config.mts')
+    const hotReloadFile = path.join(pipelineDir, 'hot-reload.json')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(
+      configFile,
+      "export default { check: { override: { 'unknown-task': 'warning' } } }"
+    )
+
+    const fileCount = 64
+    const tasksPerFile = 32
+    await Promise.all(
+      Array.from({ length: fileCount }, (_, fileIndex) => {
+        const tasks = Object.fromEntries(
+          Array.from({ length: tasksPerFile }, (_, taskIndex) => [
+            `LargeTask_${fileIndex}_${taskIndex}`,
+            {}
+          ])
+        )
+        return writeFile(path.join(pipelineDir, `tasks-${fileIndex}.json`), JSON.stringify(tasks))
+      })
+    )
+    await writeFile(
+      hotReloadFile,
+      JSON.stringify({ HotReloadEntry: { next: ['InitialMissing'] } }, null, 2)
+    )
+
+    const initialStarted = performance.now()
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project',
+      20_000
+    )
+    const symbols = await client.request('workspace/symbol', { query: 'LargeTask_' })
+    const initialDuration = performance.now() - initialStarted
+    assert.equal(symbols.result.length, fileCount * tasksPerFile)
+    assert.ok(
+      initialDuration < 15_000,
+      `large-project initialization and symbol query took ${initialDuration.toFixed(0)}ms`
+    )
+    let initialDiagnostics
+    try {
+      initialDiagnostics = await client.waitFor(
+        message =>
+          message.method === 'textDocument/publishDiagnostics' &&
+          uriTargetsFile(message.params.uri, hotReloadFile) &&
+          message.params.diagnostics.some(
+            diagnostic => diagnostic.message === '未知任务 InitialMissing'
+          )
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+    assert.equal(initialDiagnostics.params.diagnostics[0].severity, 2)
+
+    const configStarted = performance.now()
+    await writeFile(
+      configFile,
+      "export default { check: { override: { 'unknown-task': 'error' } } }"
+    )
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: reloading changed maatools.config.mts',
+      20_000
+    )
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project',
+      20_000
+    )
+    const changedDiagnostics = await client.waitFor(
+      message =>
+        message.method === 'textDocument/publishDiagnostics' &&
+        uriTargetsFile(message.params.uri, hotReloadFile) &&
+        message.params.diagnostics.some(
+          diagnostic =>
+            diagnostic.message === '未知任务 InitialMissing' && diagnostic.severity === 1
+        ),
+      20_000
+    )
+    assert.equal(changedDiagnostics.params.diagnostics[0].severity, 1)
+    const configDuration = performance.now() - configStarted
+    assert.ok(
+      configDuration < 15_000,
+      `large-project config reload took ${configDuration.toFixed(0)}ms`
+    )
+
+    const pipelineStarted = performance.now()
+    await writeFile(
+      hotReloadFile,
+      JSON.stringify(
+        { HotReloadEntry: { next: ['InitialMissing', 'PipelineHotReloadMissing'] } },
+        null,
+        2
+      )
+    )
+    let pipelineDiagnostics
+    try {
+      pipelineDiagnostics = await client.waitFor(
+        message =>
+          message.method === 'textDocument/publishDiagnostics' &&
+          uriTargetsFile(message.params.uri, hotReloadFile) &&
+          message.params.diagnostics.some(
+            diagnostic => diagnostic.message === '未知任务 PipelineHotReloadMissing'
+          ),
+        10_000
+      )
+    } catch (error) {
+      throw new Error(`${String(error)}\nPending messages: ${JSON.stringify(client.messages)}`)
+    }
+    assert.equal(pipelineDiagnostics.params.diagnostics.length, 2)
+    const pipelineDuration = performance.now() - pipelineStarted
+    assert.ok(
+      pipelineDuration < 5_000,
+      `large-project pipeline reload took ${pipelineDuration.toFixed(0)}ms`
     )
 
     await client.shutdown()
