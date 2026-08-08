@@ -1024,6 +1024,133 @@ async function completePipeline(
   return items
 }
 
+type RenameMatch = {
+  file: string
+  offset: number
+  length: number
+  startDelta: number
+}
+
+type RenameTarget = {
+  current: RenameMatch
+  matches: RenameMatch[]
+}
+
+function taskDeclRenameMatch(decl: TaskDeclInfo): RenameMatch {
+  return {
+    file: decl.file,
+    offset: decl.location.offset,
+    length: decl.location.length,
+    startDelta: 1
+  }
+}
+
+function taskRefRenameMatch(ref: TaskRefInfo): RenameMatch {
+  let startDelta = 1
+  if (ref.type === 'task.next' || ref.type === 'task.target' || ref.type === 'task.roi') {
+    startDelta += ref.attrs.offset
+  } else if (ref.type === 'task.locale') {
+    startDelta = 2
+  }
+  return {
+    file: ref.file,
+    offset: ref.location.offset,
+    length: ref.location.length,
+    startDelta
+  }
+}
+
+function interfaceRenameMatch(entry: InterfaceDeclInfo | InterfaceRefInfo): RenameMatch {
+  return {
+    file: entry.file,
+    offset: entry.location.offset,
+    length: entry.location.length,
+    startDelta: 1
+  }
+}
+
+function deduplicateRenameMatches(matches: RenameMatch[]): RenameMatch[] {
+  const seen = new Set<string>()
+  return matches.filter(match => {
+    const key = `${match.file}\0${match.offset}\0${match.length}\0${match.startDelta}`
+    if (seen.has(key)) {
+      return false
+    }
+    seen.add(key)
+    return true
+  })
+}
+
+async function resolveRenameTarget(
+  project: ProjectBundle,
+  file: string,
+  offset: number
+): Promise<RenameTarget | null> {
+  const index = project.bundle.info
+  const interfaceDecl = findDeclRef(
+    index.decls.filter(candidate => candidate.file === file),
+    offset
+  )
+  const interfaceRef = findDeclRef(
+    index.refs.filter(candidate => candidate.file === file),
+    offset
+  )
+  const interfaceDecls = makeInterfaceDecls(index, interfaceDecl, interfaceRef)
+  const interfaceRefs = makeInterfaceRefs(index, interfaceDecl, interfaceRef)
+  const interfaceCurrent = interfaceDecl ?? interfaceRef
+  if (interfaceCurrent && (interfaceDecls.length > 0 || interfaceRefs.length > 0)) {
+    return {
+      current: interfaceRenameMatch(interfaceCurrent),
+      matches: deduplicateRenameMatches(
+        [...interfaceDecls, ...interfaceRefs].map(interfaceRenameMatch)
+      )
+    }
+  }
+
+  const layerInfo = project.bundle.locateLayer(file as AbsolutePath)
+  if (!layerInfo) {
+    return null
+  }
+  const [layer, fileName, isDefault] = layerInfo
+  const decl = findDeclRef(
+    layer.mergedDecls.filter(candidate => candidate.file === fileName),
+    offset
+  )
+  const ref = findDeclRef(
+    layer.mergedRefs.filter(candidate => candidate.file === fileName),
+    offset
+  )
+  if (isDefault && decl?.type === 'task.decl') {
+    return null
+  }
+  const allDecls = project.bundle.topLayer.mergedAllDecls
+  const allRefs = project.bundle.topLayer.mergedAllRefs
+  const matchedDecls = makeDecls(allDecls, allRefs, decl, ref)
+  const matchedRefs = makeRefs(allDecls, allRefs, decl, ref)
+  if ((!decl && !ref) || (matchedDecls.length === 0 && matchedRefs.length === 0)) {
+    return null
+  }
+  return {
+    current: decl ? taskDeclRenameMatch(decl) : taskRefRenameMatch(ref!),
+    matches: deduplicateRenameMatches([
+      ...matchedDecls.map(taskDeclRenameMatch),
+      ...matchedRefs.map(taskRefRenameMatch)
+    ])
+  }
+}
+
+async function renameMatchRange(match: RenameMatch): Promise<Range> {
+  const [startLine, startCharacter] = await resolver.resolve(
+    match.file,
+    match.offset + match.startDelta
+  )
+  const [endLine, endCharacter] = await resolver.resolve(
+    match.file,
+    match.offset + match.length - 1
+  )
+  return Range.create(startLine, startCharacter, endLine, endCharacter)
+}
+
 connection.onInitialize(params => {
   workspaceRoots = workspaceRootsFromInitialize(params)
   clientSupportsWorkspaceFolders = params.capabilities.workspace?.workspaceFolders === true
@@ -1044,6 +1171,7 @@ connection.onInitialize(params => {
       hoverProvider: true,
       inlayHintProvider: true,
       referencesProvider: true,
+      renameProvider: { prepareProvider: true },
       workspaceSymbolProvider: true,
       workspace: {
         workspaceFolders: {
@@ -1180,6 +1308,56 @@ connection.onWorkspaceSymbol(async params => {
     }
   }
   return symbols
+})
+
+connection.onPrepareRename(async params => {
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.position.line,
+    params.position.character
+  )
+  if (!ctx) {
+    return null
+  }
+  const target = await resolveRenameTarget(ctx.project, ctx.file, ctx.offset)
+  if (!target) {
+    return null
+  }
+  const content = await loader.get(target.current.file)
+  const start = target.current.offset + target.current.startDelta
+  const end = target.current.offset + target.current.length - 1
+  return {
+    range: await renameMatchRange(target.current),
+    placeholder: content?.slice(start, end) ?? ''
+  }
+})
+
+connection.onRenameRequest(async params => {
+  if (params.newName.length === 0) {
+    return null
+  }
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.position.line,
+    params.position.character
+  )
+  if (!ctx) {
+    return null
+  }
+  const target = await resolveRenameTarget(ctx.project, ctx.file, ctx.offset)
+  if (!target) {
+    return null
+  }
+  const changes: Record<string, TextEdit[]> = {}
+  for (const match of target.matches) {
+    const uri = URI.file(match.file).toString()
+    const edits = changes[uri] ?? []
+    edits.push(
+      TextEdit.replace(await renameMatchRange(match), escapedStringContent(params.newName))
+    )
+    changes[uri] = edits
+  }
+  return { changes }
 })
 
 connection.onCodeLens(async params => {

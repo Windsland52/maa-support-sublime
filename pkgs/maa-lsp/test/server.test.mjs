@@ -179,6 +179,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.inlayHintProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
+    assert.deepEqual(initialized.result.capabilities.renameProvider, { prepareProvider: true })
     assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
     assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: false })
     assert.deepEqual(initialized.result.capabilities.codeActionProvider.codeActionKinds, [
@@ -704,6 +705,30 @@ test('completes pipeline tasks and interface references', async () => {
       context: { includeDeclaration: false }
     })
     assert.equal(interfaceReferencesOnly.result.length, 1)
+
+    const renamePosition = positionAtOffset(pipelineText, pipelineText.indexOf('ExistingTask') + 1)
+    const preparedRename = await client.request('textDocument/prepareRename', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: renamePosition
+    })
+    assert.equal(preparedRename.result.placeholder, 'ExistingTask')
+    const pipelineRename = await client.request('textDocument/rename', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: renamePosition,
+      newName: 'RenamedTask'
+    })
+    const pipelineRenameEdits = Object.values(pipelineRename.result.changes).flat()
+    assert.equal(pipelineRenameEdits.length, 3)
+    assert.ok(pipelineRenameEdits.every(edit => edit.newText === 'RenamedTask'))
+
+    const controllerRename = await client.request('textDocument/rename', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href },
+      position: positionAtOffset(interfaceText, interfaceText.indexOf('Adb') + 1),
+      newName: 'Android'
+    })
+    const controllerRenameEdits = Object.values(controllerRename.result.changes).flat()
+    assert.equal(controllerRenameEdits.length, 2)
+    assert.ok(controllerRenameEdits.every(edit => edit.newText === 'Android'))
 
     const symbols = await client.request('workspace/symbol', { query: 'existing' })
     assert.deepEqual(

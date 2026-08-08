@@ -55,6 +55,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Document Link（interface 路径、模板图片与本地文档）
 - Document Color（RGB/HSV 颜色预览与回写）
 - Formatting（保留 JSONC 注释与尾逗号）
+- Rename（pipeline 与 interface 跨文件声明/引用）
 - Hover（任务合并结果、图片预览、locale、颜色、锚点与 interface 信息）
 - Multi-root workspace
 
