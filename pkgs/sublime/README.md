@@ -6,7 +6,7 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 1. **Sublime Text 4**
 2. **LSP** 包 — 通过 Package Control 安装 `LSP`
-3. **Node.js 20.19.0 或更高版本** — `node` 默认需在系统 PATH 中
+3. **Node.js 20.19.0 或更高版本** — 优先使用系统 PATH；不可用时由 `lsp_utils` 提示下载仅供 LSP 使用的 runtime
 
 用户不需要安装 pnpm，也不需要单独构建 maa-lsp。
 发布包通过 `.python-version` 使用 Sublime Python 3.8 插件宿主，与当前 LSP 包保持一致。
@@ -60,13 +60,7 @@ New-Item -ItemType SymbolicLink -Path $dest -Target "C:\github\maa-support-subli
 }
 ```
 
-若 `node` 不在 PATH，可覆盖命令：
-
-```json
-{
-  "command": ["/path/to/node", "${server_path}", "--stdio"]
-}
-```
+Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Preferences: LSP Utils Settings` 调整系统或包内 runtime 的优先级；无需修改 `command`。
 
 ## 项目发现
 

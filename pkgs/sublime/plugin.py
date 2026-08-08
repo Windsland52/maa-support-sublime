@@ -6,11 +6,13 @@ import sublime
 from LSP.plugin import LspPlugin
 from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
+from lsp_utils import NodeManager
 
 SETTINGS_FILE = "LSP-MaaFramework.sublime-settings"
 PACKAGE_NAME = "LSP-MaaFramework"
 SERVER_FILE = "server.mjs"
 SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
+NODE_VERSION_REQUIREMENT = ">=20.19.0"
 
 
 class LspMaaFrameworkPlugin(LspPlugin):
@@ -25,6 +27,9 @@ class LspMaaFrameworkPlugin(LspPlugin):
                 "Reinstall LSP-MaaFramework, build the development repository, "
                 f"or set server_path in {SETTINGS_FILE}."
             )
+        node_runner = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
+        context.configuration.env.update(node_runner.node_env())
+        context.variables["node_bin"] = str(node_runner.node_binary_path())
         context.variables["server_path"] = str(server_path)
 
     @classmethod

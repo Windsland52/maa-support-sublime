@@ -24,6 +24,23 @@ class FakeLspPlugin:
         pass
 
 
+class FakeNodeRunner:
+    def node_env(self):
+        return {"NODE_TEST_RUNTIME": "1"}
+
+    def node_binary_path(self):
+        return Path("managed-node")
+
+
+class FakeNodeManager:
+    calls = []
+
+    @classmethod
+    def resolve(cls, package_name, requirement):
+        cls.calls.append((package_name, requirement))
+        return FakeNodeRunner()
+
+
 class FakeSublime(types.ModuleType):
     def __init__(self, cache):
         super().__init__("sublime")
@@ -50,9 +67,13 @@ class PluginTests(unittest.TestCase):
         lsp_plugin.LspPlugin = FakeLspPlugin
         lsp_plugin.OnPreStartContext = object
         lsp_plugin.PluginStartError = RuntimeError
+        lsp_utils = types.ModuleType("lsp_utils")
+        lsp_utils.NodeManager = FakeNodeManager
         sys.modules["sublime"] = self.sublime
         sys.modules["LSP"] = lsp
         sys.modules["LSP.plugin"] = lsp_plugin
+        sys.modules["lsp_utils"] = lsp_utils
+        FakeNodeManager.calls.clear()
 
         source = Path(__file__).with_name("plugin.py")
         spec = importlib.util.spec_from_file_location("maalsp_plugin_test", source)
@@ -63,6 +84,7 @@ class PluginTests(unittest.TestCase):
         sys.modules.pop("sublime", None)
         sys.modules.pop("LSP", None)
         sys.modules.pop("LSP.plugin", None)
+        sys.modules.pop("lsp_utils", None)
         self.temp.cleanup()
 
     def test_extracts_and_refreshes_packaged_server(self):
@@ -83,6 +105,25 @@ class PluginTests(unittest.TestCase):
             self.plugin.SERVER_RESOURCE,
             "Packages/LSP-MaaFramework/server.mjs",
         )
+
+    def test_resolves_managed_node_runtime_before_start(self):
+        server = Path(self.temp.name, "custom-server.mjs")
+        server.write_text("", encoding="utf-8")
+        self.sublime.settings.values["server_path"] = str(server)
+        context = types.SimpleNamespace(
+            configuration=types.SimpleNamespace(env={}),
+            variables={},
+        )
+
+        self.plugin.LspMaaFrameworkPlugin.on_pre_start_async(context)
+
+        self.assertEqual(
+            FakeNodeManager.calls,
+            [("LSP-MaaFramework", ">=20.19.0")],
+        )
+        self.assertEqual(context.variables["node_bin"], "managed-node")
+        self.assertEqual(context.variables["server_path"], str(server))
+        self.assertEqual(context.configuration.env, {"NODE_TEST_RUNTIME": "1"})
 
 
 if __name__ == "__main__":
