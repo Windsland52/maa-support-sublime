@@ -668,6 +668,7 @@ class PluginTests(unittest.TestCase):
                 "Test OCR…",
                 "Test Template Match…",
                 "Test Pipeline Recognition…",
+                "Analyze Maa Logs…",
                 "Manage Task Breakpoints…",
                 "Select MaaFramework Version…",
                 "Select npm Registry…",
@@ -681,7 +682,7 @@ class PluginTests(unittest.TestCase):
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(20)
+        window.on_done(21)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -854,6 +855,48 @@ class PluginTests(unittest.TestCase):
         self.assertIn('href="subl:maa_framework_stop"', window.html_sheet.content)
         self.assertIn('href="subl:maa_framework_test_ocr"', window.html_sheet.content)
         self.assertIs(self.plugin._control_sheets[window.id()], window.html_sheet)
+
+    def test_analyzes_maa_log_levels_and_events_in_html_sheet(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        log = project / "debug" / "maafw.log"
+        log.parent.mkdir()
+        log.write_text(
+            "\n".join(
+                [
+                    "[2026-08-08 10:00:00.000][INF][Tasker.cpp] [msg=Tasker.Task.Starting] [entry=Entry]",
+                    "[2026-08-08 10:00:01.000][WRN][Pipeline.cpp] retry node",
+                    "[2026-08-08 10:00:02.000][ERR][Tasker.cpp] [msg=Tasker.Task.Failed] [entry=Entry]",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+        self.plugin._log_sheets.clear()
+
+        analysis = self.plugin._analyze_maa_log(log)
+        self.assertEqual(analysis["counts"]["INF"], 1)
+        self.assertEqual(analysis["counts"]["WRN"], 1)
+        self.assertEqual(analysis["counts"]["ERR"], 1)
+        self.assertEqual(analysis["events"][0], ("Tasker.Task.Failed", 1))
+
+        self.plugin.MaaFrameworkAnalyzeLogsCommand(window).run(level="warning")
+        self.assertEqual(window.html_sheet.name, "MaaFramework Log Analysis")
+        self.assertIn("WRN: 1", window.html_sheet.content)
+        self.assertIn("ERR: 1", window.html_sheet.content)
+        self.assertIn("retry node", window.html_sheet.content)
+        self.assertNotIn("Tasker.Task.Starting]", window.html_sheet.content)
+        self.assertIn("subl:maa_framework_open_log", window.html_sheet.content)
+
+        self.plugin.MaaFrameworkOpenLogCommand(window).run(str(log))
+        self.assertEqual(window.opened, (str(log.resolve()), 0))
 
 
 if __name__ == "__main__":

@@ -37,6 +37,7 @@ NPM_REGISTRIES = {
 INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
+LOG_TAIL_LIMIT = 8 * 1024 * 1024
 _known_maa_workspaces: set[Path] = set()
 
 
@@ -473,6 +474,7 @@ class MaaShortcutController:
 
 _shortcut_controller = MaaShortcutController()
 _control_sheets = {}
+_log_sheets = {}
 
 
 def _control_panel_html() -> str:
@@ -488,6 +490,7 @@ def _control_panel_html() -> str:
         ("OCR Test", "maa_framework_test_ocr"),
         ("Template Match", "maa_framework_test_template_match"),
         ("Pipeline Recognition", "maa_framework_test_pipeline_recognition"),
+        ("Analyze Logs", "maa_framework_analyze_logs"),
         ("Refresh", "maa_framework_browser_panel_refresh"),
     ]
     controls = " ".join(
@@ -511,6 +514,121 @@ def _control_panel_html() -> str:
       <div>{controls}</div>
       <h2>Recent IPC events</h2>
       <pre>{event_text}</pre>
+    </body>
+    """
+
+
+def _maa_log_files(project: Path) -> list[Path]:
+    debug = project / "debug"
+    if not debug.is_dir():
+        return []
+    files = [
+        file
+        for file in debug.rglob("*")
+        if file.is_file()
+        and "screenshot" not in file.parts
+        and (".log" in file.name.lower() or file.suffix.lower() == ".txt")
+    ]
+    return sorted(files, key=lambda file: file.stat().st_mtime, reverse=True)
+
+
+def _read_log_tail(file: Path) -> tuple[str, bool]:
+    with file.open("rb") as stream:
+        stream.seek(0, 2)
+        size = stream.tell()
+        offset = max(0, size - LOG_TAIL_LIMIT)
+        stream.seek(offset)
+        data = stream.read()
+    text = data.decode("utf-8", errors="replace")
+    if offset:
+        _, separator, text = text.partition("\n")
+        if not separator:
+            text = ""
+    return text, offset > 0
+
+
+def _analyze_maa_log(file: Path) -> dict[str, Any]:
+    text, truncated = _read_log_tail(file)
+    counts = {level: 0 for level in ("TRC", "DBG", "INF", "WRN", "ERR", "FTL")}
+    events: dict[str, int] = {}
+    lines = []
+    level_pattern = re.compile(r"\[(TRC|DBG|INF|WRN|ERR|FTL)\]")
+    event_pattern = re.compile(r"\[(?:msg|message)=([^\]]+)\]")
+    for line in text.splitlines():
+        level_match = level_pattern.search(line)
+        level = level_match.group(1) if level_match else "OTHER"
+        if level in counts:
+            counts[level] += 1
+        event_match = event_pattern.search(line)
+        event = event_match.group(1) if event_match else None
+        if event:
+            events[event] = events.get(event, 0) + 1
+        lines.append((level, line, bool(event) or "task start:" in line or "task end:" in line))
+    return {
+        "file": file,
+        "counts": counts,
+        "events": sorted(events.items(), key=lambda item: (-item[1], item[0]))[:20],
+        "lines": lines,
+        "truncated": truncated,
+    }
+
+
+def _log_analysis_html(analysis: dict[str, Any], selected: str) -> str:
+    file = analysis["file"]
+    counts = analysis["counts"]
+    filters = [
+        ("events", "Events"),
+        ("warning", "Warnings + Errors"),
+        ("error", "Errors"),
+        ("all", "All"),
+    ]
+    buttons = " ".join(
+        f'<a class="button{(" selected" if key == selected else "")}" href="{sublime.command_url("maa_framework_analyze_logs", {"file": str(file), "level": key})}">{label}</a>'
+        for key, label in filters
+    )
+    buttons += " " + (
+        f'<a class="button" href="{sublime.command_url("maa_framework_open_log", {"file": str(file)})}">Open Raw Log</a>'
+    )
+    visible = []
+    for level, line, is_event in analysis["lines"]:
+        if selected == "events" and not is_event:
+            continue
+        if selected == "warning" and level not in {"WRN", "ERR", "FTL"}:
+            continue
+        if selected == "error" and level not in {"ERR", "FTL"}:
+            continue
+        visible.append(line)
+    visible = visible[-300:]
+    count_html = " ".join(
+        f'<span class="count {level.lower()}">{level}: {counts[level]}</span>'
+        for level in counts
+    )
+    event_html = "".join(
+        f"<tr><td>{html.escape(name)}</td><td>{count}</td></tr>"
+        for name, count in analysis["events"]
+    ) or '<tr><td colspan="2">No Maa event records in the analyzed range.</td></tr>'
+    truncation = "Only the latest 8 MiB is analyzed." if analysis["truncated"] else "Full file analyzed."
+    return f"""
+    <body id="maa-log-analysis">
+      <style>
+        body {{ padding: 1rem; }}
+        h1 {{ margin: 0 0 0.4rem 0; }}
+        .path {{ opacity: 0.75; margin-bottom: 0.75rem; }}
+        .button, .count {{ display: inline-block; padding: 0.3rem 0.55rem; margin: 0 0.25rem 0.4rem 0; border-radius: 0.25rem; background-color: color(var(--foreground) alpha(0.1)); }}
+        .selected {{ background-color: color(var(--accent) alpha(0.35)); }}
+        .err, .ftl {{ color: var(--redish); }}
+        table {{ margin: 0.75rem 0; }}
+        td {{ padding-right: 1rem; }}
+        pre {{ padding: 0.75rem; white-space: pre-wrap; background-color: color(var(--foreground) alpha(0.06)); }}
+      </style>
+      <h1>MaaFramework Log Analysis</h1>
+      <div class="path">{html.escape(str(file))} — {truncation}</div>
+      <div>{count_html}</div>
+      <p>{buttons}</p>
+      <h2>Top events</h2>
+      <table>{event_html}</table>
+      <h2>Recent matching lines ({len(visible)})</h2>
+      <pre>{html.escape(chr(10).join(visible))}</pre>
     </body>
     """
 
@@ -1085,6 +1203,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Test OCR…",
             "Test Template Match…",
             "Test Pipeline Recognition…",
+            "Analyze Maa Logs…",
             "Manage Task Breakpoints…",
             "Select MaaFramework Version…",
             "Select npm Registry…",
@@ -1115,6 +1234,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_test_ocr",
             "maa_framework_test_template_match",
             "maa_framework_test_pipeline_recognition",
+            "maa_framework_analyze_logs",
             "maa_framework_breakpoints",
             "maa_framework_select_version",
             "maa_framework_select_registry",
@@ -1259,6 +1379,85 @@ class MaaFrameworkTestPipelineRecognitionCommand(sublime_plugin.WindowCommand):
     def _on_done(self, index: int) -> None:
         if 0 <= index < len(self._tasks):
             _runtime_manager.test_pipeline_recognition(self.window, self._tasks[index])
+
+
+def _project_log_path(window, value: str) -> Optional[Path]:
+    project = _active_project(window)
+    if project is None:
+        return None
+    try:
+        file = Path(value).resolve()
+        file.relative_to((project / "debug").resolve())
+        return file if file.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
+class MaaFrameworkAnalyzeLogsCommand(sublime_plugin.WindowCommand):
+    def run(self, file: Optional[str] = None, level: str = "events") -> None:
+        if level not in {"events", "warning", "error", "all"}:
+            level = "events"
+        if file is not None:
+            selected = _project_log_path(self.window, file)
+            if selected is None:
+                sublime.status_message("MaaFramework: log path is outside the active project")
+                return
+            self._show(selected, level)
+            return
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        self._files = _maa_log_files(project)
+        if not self._files:
+            sublime.status_message("MaaFramework: no log files found under project/debug")
+            return
+        if len(self._files) == 1:
+            self._show(self._files[0], level)
+            return
+        self.window.show_quick_panel(
+            [
+                [
+                    str(path.relative_to(project)),
+                    f"{path.stat().st_size / 1024:.1f} KiB",
+                ]
+                for path in self._files
+            ],
+            lambda index: self._show(self._files[index], level)
+            if 0 <= index < len(self._files)
+            else None,
+        )
+
+    def _show(self, file: Path, level: str) -> None:
+        sheet = _log_sheets.get(self.window.id())
+        loading = f"<body><h1>MaaFramework Log Analysis</h1><p>Reading {html.escape(str(file))}…</p></body>"
+        if sheet is None:
+            sheet = self.window.new_html_sheet("MaaFramework Log Analysis", loading)
+            _log_sheets[self.window.id()] = sheet
+        else:
+            sheet.set_contents(loading)
+
+        def analyze() -> None:
+            try:
+                content = _log_analysis_html(_analyze_maa_log(file), level)
+            except Exception as error:
+                content = (
+                    "<body><h1>MaaFramework Log Analysis</h1><p>Cannot analyze log: "
+                    + html.escape(str(error))
+                    + "</p></body>"
+                )
+            sublime.set_timeout(lambda: sheet.set_contents(content))
+
+        sublime.set_timeout_async(analyze)
+
+
+class MaaFrameworkOpenLogCommand(sublime_plugin.WindowCommand):
+    def run(self, file: str) -> None:
+        selected = _project_log_path(self.window, file)
+        if selected is None:
+            sublime.status_message("MaaFramework: log path is outside the active project")
+            return
+        self.window.open_file(str(selected))
 
 
 class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):

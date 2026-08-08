@@ -76,7 +76,7 @@
 - [x] 浏览器执行面板与 Sublime IPC
 - [x] 截图与裁剪
 - [x] OCR、模板匹配与 pipeline 识别测试
-- [ ] Maa 日志分析 UI
+- [x] Maa 日志分析 UI
 - [ ] MaaLogAnalyzer 集成
 
 ## 稳定性

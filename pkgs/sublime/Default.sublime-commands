@@ -96,6 +96,10 @@
     "command": "maa_framework_test_pipeline_recognition"
   },
   {
+    "caption": "MaaFramework: Analyze Logs",
+    "command": "maa_framework_analyze_logs"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

@@ -99,6 +99,12 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 为避免同一 Tasker 并发执行，识别测试需要等待队列进入 finished/stopped 后调用。每次测试使用唯一的临时 custom action，结果保留识别元数据及 raw/draw PNG data URL；报告本身不会把图像写入 resource。
 
+## Maa 日志分析 UI
+
+`Analyze Logs` 扫描活动项目 `debug/` 下的 `.log` / `.txt`，默认打开最新文件。内置 minihtml sheet 汇总 TRC/DBG/INF/WRN/ERR/FTL 数量和出现次数最多的 Maa event，并提供 Events、Warnings + Errors、Errors、All 四种视图以及 `Open Raw Log`。筛选只通过 `subl:` command URL 回到受路径校验的 WindowCommand，不执行脚本。
+
+为控制大型日志的内存和 UI 开销，最多读取文件末尾 8 MiB、最多展示最近 300 条匹配记录；UI 会明确标识是否截断。文件读取和分析在线程池执行，不阻塞 Sublime UI。此功能只解析 MaaFramework 通用日志格式，不识别 MaaAssistantArknights 专有任务。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。
