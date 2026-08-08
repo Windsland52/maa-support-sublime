@@ -30,6 +30,8 @@ workspace folder 增删或客户端报告 interface 文件新增/删除时会重
 - `resource` 有效时沿用；
 - resource 缺失或无效时选择 interface 中的第一个 resource。
 
+LSP 直接监听每个 interface 同级的 `config/maa_pi_config.json`。文件新增、修改或删除后只切换该项目的活动 controller/resource 并重新发布诊断，不重扫 workspace，也不需要重启 Sublime。
+
 ## 编辑器内容
 
 LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未打开的文档从磁盘读取；文档修改和关闭都会通知 `InterfaceBundle` 刷新。位置换算、诊断、定义跳转和 Hover 使用相同内容来源。

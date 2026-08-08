@@ -423,3 +423,72 @@ test('applies diagnostic severity and ignore overrides from maatools.config.mts'
     await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 })
+
+test('hot reloads resource selection from config/maa_pi_config.json', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-selection-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const configDir = path.join(workspace, 'config')
+    const configFile = path.join(configDir, 'maa_pi_config.json')
+    const firstPipeline = path.join(workspace, 'first', 'pipeline')
+    const secondPipeline = path.join(workspace, 'second', 'pipeline')
+    await mkdir(configDir, { recursive: true })
+    await mkdir(firstPipeline, { recursive: true })
+    await mkdir(secondPipeline, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({
+        resource: [
+          { name: 'First', path: 'first' },
+          { name: 'Second', path: 'second' }
+        ]
+      })
+    )
+    await writeFile(configFile, JSON.stringify({ resource: 'First' }))
+    await writeFile(path.join(firstPipeline, 'tasks.json'), JSON.stringify({ FirstTask: {} }))
+    await writeFile(
+      path.join(secondPipeline, 'tasks.json'),
+      JSON.stringify({ SecondTask: { next: ['OnlyInSecond'] } }, null, 2)
+    )
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    await writeFile(configFile, JSON.stringify({ resource: 'Second' }))
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message.toLowerCase() ===
+          `maa-lsp: reloaded maa_pi_config.json for ${workspace}`.toLowerCase()
+    )
+    const published = await client.waitFor(
+      message =>
+        message.method === 'textDocument/publishDiagnostics' &&
+        message.params.diagnostics.some(diagnostic => diagnostic.message.includes('OnlyInSecond'))
+    )
+    assert.deepEqual(
+      published.params.diagnostics.map(diagnostic => diagnostic.message),
+      ['未知任务 OnlyInSecond']
+    )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})

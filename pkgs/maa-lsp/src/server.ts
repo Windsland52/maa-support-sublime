@@ -136,6 +136,7 @@ let clientSupportsWorkspaceFolders = false
 let projects: ProjectBundle[] = []
 let configWatchers: IContentWatcherController[] = []
 let refreshQueue = Promise.resolve()
+let selectionQueue = Promise.resolve()
 let publishQueue = Promise.resolve()
 const publishedUris = new Set<string>()
 
@@ -222,6 +223,36 @@ async function watchMaaToolsConfig(file: string) {
   configWatchers.push(controller)
 }
 
+function queueInterfaceSelection(project: ProjectBundle, file: string) {
+  selectionQueue = selectionQueue
+    .then(async () => {
+      await selectConfiguredResource(project)
+      connection.console.info(`maa-lsp: reloaded ${path.basename(file)} for ${project.root.dir}`)
+      queuePublishDiagnostics()
+    })
+    .catch(error => {
+      connection.console.error(`maa-lsp: failed to reload ${path.basename(file)}: ${String(error)}`)
+    })
+}
+
+async function watchInterfaceConfig(project: ProjectBundle) {
+  const file = path.join(project.root.dir, 'config', 'maa_pi_config.json')
+  let ready = false
+  const changed = () => {
+    if (ready) {
+      queueInterfaceSelection(project, file)
+    }
+  }
+  const controller = await watcher.watch(file, true, {
+    filter: () => true,
+    fileAdded: changed,
+    fileChanged: changed,
+    fileDeleted: changed
+  })
+  ready = true
+  configWatchers.push(controller)
+}
+
 async function setupProjects(roots: string[]) {
   await teardownProjects()
 
@@ -265,6 +296,7 @@ async function setupProjects(roots: string[]) {
     try {
       await bundle.load()
       await selectConfiguredResource(project)
+      await watchInterfaceConfig(project)
       nextProjects.push(project)
     } catch (error) {
       bundle.stop()
