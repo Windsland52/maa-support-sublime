@@ -41,7 +41,7 @@
 - [x] References
 - [x] Workspace Symbol
 - [x] Code Lens
-- [ ] Inlay Hint
+- [x] Inlay Hint
 - [ ] Code Action
 - [ ] Document Link
 - [ ] Document Color

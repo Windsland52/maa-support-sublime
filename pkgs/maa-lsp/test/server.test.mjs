@@ -150,6 +150,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     ])
     assert.equal(initialized.result.capabilities.definitionProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
+    assert.equal(initialized.result.capabilities.inlayHintProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
     assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
     assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: false })
@@ -682,6 +683,70 @@ test('completes pipeline tasks and interface references', async () => {
       interfaceLenses.result.map(lens => lens.command.title),
       ['Active resource']
     )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('provides task documentation and locale inlay hints', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-inlay-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const languageDir = path.join(workspace, 'lang')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    await mkdir(pipelineDir, { recursive: true })
+    await mkdir(languageDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({
+        resource: [{ name: 'Default', path: 'resource' }],
+        languages: { English: 'lang/en.json' }
+      })
+    )
+    await writeFile(path.join(languageDir, 'en.json'), JSON.stringify({ greeting: 'Hello' }))
+    const pipelineText = JSON.stringify(
+      {
+        DocumentedTask: { doc: 'Helpful task' },
+        Entry: {
+          next: ['DocumentedTask'],
+          focus: { tip: '$greeting' }
+        }
+      },
+      null,
+      2
+    )
+    await writeFile(pipelineFile, pipelineText)
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+    const lines = pipelineText.split('\n')
+    const hints = await client.request('textDocument/inlayHint', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: lines.length - 1, character: lines.at(-1).length }
+      }
+    })
+    assert.deepEqual(hints.result.map(hint => hint.label).sort(), ['Hello', 'Helpful task'])
 
     await client.shutdown()
     client = undefined

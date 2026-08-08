@@ -129,6 +129,7 @@ type ProjectBundle = {
 }
 
 type InterfaceConfig = {
+  __locale?: unknown
   controller?: unknown
   resource?: unknown
 }
@@ -171,7 +172,7 @@ async function teardownProjects() {
 
 async function loadInterfaceConfig(
   root: ResourceRoot
-): Promise<{ controller: string; resource: string }> {
+): Promise<{ controller: string; locale: string; resource: string }> {
   let config: InterfaceConfig = {}
   try {
     config = JSON.parse(await fs.readFile(root.configFile, 'utf8')) as InterfaceConfig
@@ -192,6 +193,7 @@ async function loadInterfaceConfig(
   }
   return {
     controller,
+    locale: typeof config.__locale === 'string' ? config.__locale : '',
     resource: typeof config.resource === 'string' ? config.resource : ''
   }
 }
@@ -896,6 +898,7 @@ connection.onInitialize(params => {
       codeLensProvider: { resolveProvider: false },
       definitionProvider: true,
       hoverProvider: true,
+      inlayHintProvider: true,
       referencesProvider: true,
       workspaceSymbolProvider: true,
       workspace: {
@@ -1092,6 +1095,59 @@ connection.onCodeLens(async params => {
       })
     }
     return lenses
+  }
+  return null
+})
+
+connection.languages.inlayHint.on(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    const layerInfo = project.bundle.locateLayer(file)
+    if (!layerInfo) {
+      continue
+    }
+    const [layer, fileName] = layerInfo
+    const beginOffset = await resolver.positionToOffset(
+      file,
+      params.range.start.line,
+      params.range.start.character
+    )
+    const endOffset = await resolver.positionToOffset(
+      file,
+      params.range.end.line,
+      params.range.end.character
+    )
+    const refs = layer.mergedRefs.filter(
+      ref =>
+        ref.file === fileName &&
+        ref.location.offset >= beginOffset &&
+        ref.location.offset + ref.location.length <= endOffset
+    )
+    const selection = await loadInterfaceConfig(project.root)
+    const preferredLocale = project.bundle.langBundle.queryName(selection.locale)
+    const hints = []
+    for (const ref of refs) {
+      const [line, character] = await resolver.resolve(
+        file,
+        ref.location.offset + ref.location.length
+      )
+      if (ref.type === 'task.locale') {
+        const locale = project.bundle.langBundle.queryKey(ref.target)[preferredLocale]
+        if (locale) {
+          hints.push({ position: { line, character }, label: locale.value })
+        }
+      }
+      const task = extractTaskRef(ref)
+      if (task) {
+        const doc = layer.getTaskDoc(task)
+        if (doc) {
+          hints.push({ position: { line, character }, label: doc })
+        }
+      }
+    }
+    return hints
   }
   return null
 })

@@ -50,6 +50,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - References（pipeline 与 interface 声明/引用）
 - Workspace Symbol（跨项目任务名搜索）
 - Code Lens（任务引用数与活动资源状态）
+- Inlay Hint（任务文档与当前 locale 文本）
 - Hover
 - Multi-root workspace
 
