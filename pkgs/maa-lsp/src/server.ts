@@ -2,6 +2,8 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
+  type CodeAction,
+  CodeActionKind,
   type CompletionItem,
   CompletionItemKind,
   type Definition,
@@ -387,6 +389,7 @@ async function publishDiagnostics() {
       )
       const list = byFile.get(effective.file) ?? []
       list.push({
+        code: effective.type,
         severity:
           effective.level === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
         range: Range.create(start[0], start[1], end[0], end[1]),
@@ -896,6 +899,9 @@ connection.onInitialize(params => {
         triggerCharacters: ['"', '[', ']', '$']
       },
       codeLensProvider: { resolveProvider: false },
+      codeActionProvider: {
+        codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
+      },
       definitionProvider: true,
       hoverProvider: true,
       inlayHintProvider: true,
@@ -1150,6 +1156,105 @@ connection.languages.inlayHint.on(async params => {
     return hints
   }
   return null
+})
+
+connection.onCodeAction(async params => {
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.range.start.line,
+    params.range.start.character
+  )
+  if (!ctx) {
+    return null
+  }
+  const layerInfo = ctx.project.bundle.locateLayer(ctx.file as AbsolutePath)
+  if (!layerInfo) {
+    return null
+  }
+  const [layer, fileName] = layerInfo
+  const actions: CodeAction[] = []
+  const decl = findDeclRef(
+    layer.mergedDecls.filter(candidate => candidate.file === fileName),
+    ctx.offset
+  )
+  if (decl?.type === 'task.decl') {
+    const info = layer.tasks[decl.task]?.find(candidate => candidate.file === fileName)
+    const content = info ? await loader.get(info.file) : null
+    if (info && content !== null) {
+      const starts = computeLineStarts(content)
+      const line = lineOfStarts(starts, info.prop.offset)
+      const indent = content.slice(starts[line], info.prop.offset)
+      const range = (
+        await toLocation(
+          info.file,
+          info.prop.offset,
+          info.data.offset + info.data.length - info.prop.offset
+        )
+      ).range
+      for (const version of [1, 2] as const) {
+        actions.push({
+          title: `Convert task to v${version} syntax`,
+          kind: CodeActionKind.RefactorRewrite,
+          edit: {
+            changes: {
+              [params.textDocument.uri]: [
+                TextEdit.replace(range, layer.toggleMode(version, info, indent))
+              ]
+            }
+          }
+        })
+      }
+    }
+  }
+
+  const content = await loader.get(ctx.file)
+  if (content !== null) {
+    for (const diagnostic of params.context.diagnostics) {
+      if (
+        diagnostic.source !== 'maa' ||
+        (diagnostic.code !== 'image-path-back-slash' && diagnostic.code !== 'image-path-dot-slash')
+      ) {
+        continue
+      }
+      const start = await resolver.positionToOffset(
+        ctx.file,
+        diagnostic.range.start.line,
+        diagnostic.range.start.character
+      )
+      const end = await resolver.positionToOffset(
+        ctx.file,
+        diagnostic.range.end.line,
+        diagnostic.range.end.character
+      )
+      try {
+        const value = JSON.parse(content.slice(start, end)) as unknown
+        if (typeof value !== 'string') {
+          continue
+        }
+        const fixed =
+          diagnostic.code === 'image-path-back-slash'
+            ? value.replaceAll('\\', '/')
+            : value.replace(/^\.\//, '')
+        actions.push({
+          title:
+            diagnostic.code === 'image-path-back-slash'
+              ? 'Replace image path backslashes'
+              : 'Remove ./ from image path',
+          kind: CodeActionKind.QuickFix,
+          diagnostics: [diagnostic],
+          isPreferred: true,
+          edit: {
+            changes: {
+              [params.textDocument.uri]: [TextEdit.replace(diagnostic.range, JSON.stringify(fixed))]
+            }
+          }
+        })
+      } catch {
+        // Ignore diagnostics whose range is no longer a JSON string in the current buffer.
+      }
+    }
+  }
+  return actions
 })
 
 connection.onDefinition(async params => {

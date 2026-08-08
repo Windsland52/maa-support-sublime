@@ -154,6 +154,10 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.equal(initialized.result.capabilities.referencesProvider, true)
     assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
     assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: false })
+    assert.deepEqual(initialized.result.capabilities.codeActionProvider.codeActionKinds, [
+      'quickfix',
+      'refactor.rewrite'
+    ])
 
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
     const loaded = await client.waitFor(
@@ -424,6 +428,7 @@ test('applies diagnostic severity and ignore overrides from maatools.config.mts'
     )
     assert.deepEqual(published.params.diagnostics, [
       {
+        code: 'unknown-task',
         severity: 2,
         range: published.params.diagnostics[0].range,
         message: '未知任务 MissingTask',
@@ -590,7 +595,13 @@ test('completes pipeline tasks and interface references', async () => {
     const pipelineText = JSON.stringify(
       {
         ExistingTask: {},
-        Entry: { next: ['ExistingTask'] },
+        Entry: {
+          recognition: {
+            type: 'TemplateMatch',
+            param: { template: './folder\\image.png' }
+          },
+          next: ['ExistingTask']
+        },
         Other: { next: ['ExistingTask'] }
       },
       null,
@@ -683,6 +694,40 @@ test('completes pipeline tasks and interface references', async () => {
       interfaceLenses.result.map(lens => lens.command.title),
       ['Active resource']
     )
+
+    const taskPosition = positionAtOffset(pipelineText, pipelineText.indexOf('ExistingTask') + 1)
+    const taskActions = await client.request('textDocument/codeAction', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      range: { start: taskPosition, end: taskPosition },
+      context: { diagnostics: [] }
+    })
+    assert.deepEqual(
+      taskActions.result.map(action => action.title),
+      ['Convert task to v1 syntax', 'Convert task to v2 syntax']
+    )
+    assert.ok(
+      taskActions.result.every(
+        action => action.edit.changes[pathToFileURL(pipelineFile).href].length === 1
+      )
+    )
+
+    const imageDiagnostics = await client.waitFor(
+      message =>
+        message.method === 'textDocument/publishDiagnostics' &&
+        message.params.diagnostics.some(diagnostic => diagnostic.code === 'image-path-back-slash')
+    )
+    const pathDiagnostics = imageDiagnostics.params.diagnostics.filter(diagnostic =>
+      ['image-path-back-slash', 'image-path-dot-slash'].includes(diagnostic.code)
+    )
+    const pathActions = await client.request('textDocument/codeAction', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      range: pathDiagnostics[0].range,
+      context: { diagnostics: pathDiagnostics }
+    })
+    assert.deepEqual(pathActions.result.map(action => action.title).sort(), [
+      'Remove ./ from image path',
+      'Replace image path backslashes'
+    ])
 
     await client.shutdown()
     client = undefined

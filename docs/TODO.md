@@ -42,7 +42,7 @@
 - [x] Workspace Symbol
 - [x] Code Lens
 - [x] Inlay Hint
-- [ ] Code Action
+- [x] Code Action
 - [ ] Document Link
 - [ ] Document Color
 - [ ] 完整 Hover
