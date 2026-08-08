@@ -1,0 +1,36 @@
+# maa-lsp MVP
+
+> ⚠️ 本文档由 AI 生成，主要用于辅助 AI 理解项目。内容可能与实际代码不同步，请注意甄别。
+
+## 项目发现
+
+`maa-lsp` 对初始化参数中的所有 `workspaceFolders` 执行递归扫描；旧客户端回退到 `rootUri` / `rootPath`。规则与 `maa-support-extension/pkgs/extension/src/utils/fs.ts` 一致：
+
+- 识别任意深度的 `interface.json` 和 `interface.jsonc`；
+- 不进入名称以 `.` 开头的目录；
+- 不进入 `node_modules`、`MaaUtils`、`MaaDeps`；
+- 每个 interface 建立独立 `InterfaceBundle`；
+- 多项目请求优先匹配目录层级更深的 bundle。
+
+workspace folder 增删或客户端报告 interface 文件新增/删除时会重新扫描。
+
+## 资源选择
+
+每个项目读取 interface 同级的 `config/maa_pi_config.json`：
+
+- `controller` 支持当前字符串格式和旧版 `{ "name": "..." }` 格式；
+- `resource` 有效时沿用；
+- resource 缺失或无效时选择 interface 中的第一个 resource。
+
+## 编辑器内容
+
+LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未打开的文档从磁盘读取；文档修改和关闭都会通知 `InterfaceBundle` 刷新。位置换算、诊断、定义跳转和 Hover 使用相同内容来源。
+
+## 能力
+
+- Diagnostics
+- Definition
+- Hover
+- Multi-root workspace
+
+当前未实现 completion、code action、formatting、code lens 和资源选择 UI。

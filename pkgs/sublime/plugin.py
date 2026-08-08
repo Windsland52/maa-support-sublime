@@ -8,6 +8,9 @@ from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
 
 SETTINGS_FILE = "MaaLSP.sublime-settings"
+PACKAGE_NAME = "MaaLSP"
+SERVER_FILE = "server.mjs"
+SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
 
 
 class MaaLspPlugin(LspPlugin):
@@ -18,8 +21,8 @@ class MaaLspPlugin(LspPlugin):
         server_path = cls._resolve_server_path()
         if server_path is None:
             raise PluginStartError(
-                "maa-lsp: server.mjs not found. "
-                "Run 'pnpm build' in the maa-support-sublime repo, "
+                "maa-lsp: bundled server.mjs not found. "
+                "Reinstall MaaLSP, build the development repository, "
                 f"or set server_path in {SETTINGS_FILE}."
             )
         context.variables["server_path"] = str(server_path)
@@ -33,10 +36,31 @@ class MaaLspPlugin(LspPlugin):
             if path.is_file():
                 return path
         here = Path(__file__).resolve().parent
-        candidate = here / ".." / "maa-lsp" / "dist" / "server.mjs"
-        if candidate.is_file():
-            return candidate.resolve()
-        return None
+        candidates = [
+            here / SERVER_FILE,
+            here / ".." / "maa-lsp" / "dist" / SERVER_FILE,
+        ]
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.resolve()
+        return cls._extract_packaged_server()
+
+    @staticmethod
+    def _extract_packaged_server() -> Path | None:
+        try:
+            content = sublime.load_binary_resource(SERVER_RESOURCE)
+        except Exception:
+            return None
+
+        target_dir = Path(sublime.cache_path()) / PACKAGE_NAME
+        target = target_dir / SERVER_FILE
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or target.read_bytes() != content:
+                target.write_bytes(content)
+            return target
+        except OSError:
+            return None
 
 
 def plugin_loaded() -> None:

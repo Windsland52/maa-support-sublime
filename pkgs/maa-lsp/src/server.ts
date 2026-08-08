@@ -1,15 +1,18 @@
-import { existsSync } from 'node:fs'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
+import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
   type Definition,
   DiagnosticSeverity,
+  FileChangeType,
   Hover,
+  type InitializeParams,
   Location,
   type Diagnostic as LspDiagnostic,
   MarkupKind,
   Range,
   TextDocumentSyncKind,
+  TextDocuments,
   createConnection
 } from 'vscode-languageserver/node.js'
 import { URI } from 'vscode-uri'
@@ -17,8 +20,6 @@ import { URI } from 'vscode-uri'
 import {
   type AbsolutePath,
   type AnchorName,
-  FsContentLoader,
-  FsContentWatcher,
   InterfaceBundle,
   type TaskDeclInfo,
   type TaskName,
@@ -29,6 +30,9 @@ import {
   isAnchorRef,
   performDiagnostic
 } from '@nekosu/maa-pipeline-manager'
+
+import { LspContentLoader, LspContentWatcher } from './content'
+import { type ResourceRoot, isInterfaceFile, locateResourceRoots } from './workspace'
 
 function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
   let timer: NodeJS.Timeout | undefined
@@ -67,6 +71,8 @@ function lineOfStarts(starts: number[], offset: number): number {
 class PositionResolver {
   private cache = new Map<string, number[]>()
 
+  constructor(private readonly loader: LspContentLoader) {}
+
   reset() {
     this.cache.clear()
   }
@@ -76,10 +82,8 @@ class PositionResolver {
     if (starts) {
       return starts
     }
-    let content: string
-    try {
-      content = await fs.readFile(file, 'utf8')
-    } catch {
+    const content = await this.loader.get(file)
+    if (content === null) {
       return null
     }
     starts = computeLineStarts(content)
@@ -106,68 +110,30 @@ class PositionResolver {
   }
 }
 
+type ProjectBundle = {
+  root: ResourceRoot
+  bundle: InterfaceBundle
+}
+
+type InterfaceConfig = {
+  controller?: unknown
+  resource?: unknown
+}
+
 const connection = createConnection()
+const documents = new TextDocuments(TextDocument)
+documents.listen(connection)
 
-let workspaceRoot = ''
-let bundle: InterfaceBundle | undefined
-const resolver = new PositionResolver()
+const loader = new LspContentLoader(documents)
+const watcher = new LspContentWatcher(documents)
+const resolver = new PositionResolver(loader)
+
+let workspaceRoots: string[] = []
+let clientSupportsWorkspaceFolders = false
+let projects: ProjectBundle[] = []
+let refreshQueue = Promise.resolve()
+let publishQueue = Promise.resolve()
 const publishedUris = new Set<string>()
-
-const schedulePublish = debounce(publishDiagnostics, 500)
-
-async function findResourceDir(
-  root: string
-): Promise<{ dir: string; interfaceFile: string } | null> {
-  const names = ['interface.json', 'interface.jsonc']
-  for (const dir of [root, path.join(root, 'resource')]) {
-    for (const name of names) {
-      if (existsSync(path.join(dir, name))) {
-        return { dir, interfaceFile: name }
-      }
-    }
-  }
-  return null
-}
-
-async function setupBundle(rootUri: string | undefined | null) {
-  await teardownBundle()
-  const root = rootUri ? URI.parse(rootUri).fsPath : process.cwd()
-  workspaceRoot = root
-  const found = await findResourceDir(root)
-  if (!found) {
-    connection.console.warn(`maa-lsp: no interface.json found under ${root}; diagnostics disabled`)
-    clearAllDiagnostics()
-    return
-  }
-  bundle = new InterfaceBundle(
-    new FsContentLoader(),
-    new FsContentWatcher(),
-    false,
-    found.dir as AbsolutePath,
-    found.interfaceFile as AbsolutePath,
-    undefined
-  )
-  bundle.on('pipelineChanged', schedulePublish)
-  bundle.on('interfaceChanged', schedulePublish)
-  bundle.on('importChanged', schedulePublish)
-  bundle.on('slaveInterfaceChanged', schedulePublish)
-  bundle.on('bundleReloaded', schedulePublish)
-  bundle.on('localeChanged', schedulePublish)
-  await bundle.load()
-  const controller = bundle.allControllerNames()[0] ?? ''
-  const resource = bundle.allResourceNames(controller)[0] ?? ''
-  if (resource) {
-    await bundle.switchActive(controller, resource).catch(err => {
-      connection.console.warn(`maa-lsp: switchActive failed: ${String(err)}`)
-    })
-  }
-  void publishDiagnostics()
-}
-
-async function teardownBundle() {
-  bundle?.stop()
-  bundle = undefined
-}
 
 function clearAllDiagnostics() {
   for (const uri of publishedUris) {
@@ -176,34 +142,161 @@ function clearAllDiagnostics() {
   publishedUris.clear()
 }
 
-async function publishDiagnostics() {
-  if (!bundle) {
-    return
+async function teardownProjects() {
+  for (const project of projects) {
+    project.bundle.stop()
   }
-  resolver.reset()
+  projects = []
+  clearAllDiagnostics()
+}
+
+async function loadInterfaceConfig(
+  root: ResourceRoot
+): Promise<{ controller: string; resource: string }> {
+  let config: InterfaceConfig = {}
   try {
-    await bundle.flush(true)
-  } catch (err) {
-    connection.console.warn(`maa-lsp: bundle.flush failed: ${String(err)}`)
+    config = JSON.parse(await fs.readFile(root.configFile, 'utf8')) as InterfaceConfig
+  } catch {
+    // The extension treats a missing or invalid config as an empty selection.
   }
-  const diags = performDiagnostic(bundle, {})
-  const byFile = new Map<string, LspDiagnostic[]>()
-  for (const diag of diags) {
-    const [start, end, brief] = await buildDiagnosticMessage(
-      workspaceRoot as AbsolutePath,
-      diag,
-      (file, offset) => resolver.resolve(file, offset),
-      {}
+
+  let controller = ''
+  if (typeof config.controller === 'string') {
+    controller = config.controller
+  } else if (
+    typeof config.controller === 'object' &&
+    config.controller !== null &&
+    'name' in config.controller &&
+    typeof config.controller.name === 'string'
+  ) {
+    controller = config.controller.name
+  }
+  return {
+    controller,
+    resource: typeof config.resource === 'string' ? config.resource : ''
+  }
+}
+
+async function selectConfiguredResource(project: ProjectBundle) {
+  const config = await loadInterfaceConfig(project.root)
+  const resources = project.bundle.allResourceNames()
+  const resource = resources.includes(config.resource) ? config.resource : (resources[0] ?? '')
+  await project.bundle.switchActive(config.controller, resource)
+}
+
+function queuePublishDiagnostics() {
+  publishQueue = publishQueue.then(publishDiagnostics).catch(error => {
+    connection.console.error(`maa-lsp: diagnostics failed: ${String(error)}`)
+  })
+}
+
+const schedulePublish = debounce(queuePublishDiagnostics, 500)
+
+async function setupProjects(roots: string[]) {
+  await teardownProjects()
+
+  const found = await locateResourceRoots(roots, (dir, error) => {
+    connection.console.warn(`maa-lsp: cannot scan ${dir}: ${String(error)}`)
+  })
+  const nextProjects: ProjectBundle[] = []
+
+  for (const root of found) {
+    const bundle = new InterfaceBundle(
+      loader,
+      watcher,
+      false,
+      root.dir as AbsolutePath,
+      root.interfaceFile as AbsolutePath,
+      undefined
     )
-    const list = byFile.get(diag.file) ?? []
-    list.push({
-      severity: diag.level === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
-      range: Range.create(start[0], start[1], end[0], end[1]),
-      message: brief,
-      source: 'maa'
-    })
-    byFile.set(diag.file, list)
+    const project = { root, bundle }
+    for (const event of [
+      'pipelineChanged',
+      'interfaceChanged',
+      'importChanged',
+      'slaveInterfaceChanged',
+      'bundleReloaded',
+      'localeChanged'
+    ] as const) {
+      bundle.on(event, schedulePublish)
+    }
+
+    try {
+      await bundle.load()
+      await selectConfiguredResource(project)
+      nextProjects.push(project)
+    } catch (error) {
+      bundle.stop()
+      connection.console.warn(
+        `maa-lsp: failed to load ${path.join(root.dir, root.interfaceFile)}: ${String(error)}`
+      )
+    }
   }
+
+  projects = nextProjects.sort((a, b) => b.root.dir.length - a.root.dir.length)
+  connection.console.info(
+    `maa-lsp: loaded ${projects.length} interface project${projects.length === 1 ? '' : 's'}`
+  )
+  queuePublishDiagnostics()
+}
+
+function queueWorkspaceRefresh() {
+  const roots = [...workspaceRoots]
+  refreshQueue = refreshQueue
+    .then(() => setupProjects(roots))
+    .catch(error => {
+      connection.console.error(`maa-lsp: workspace refresh failed: ${String(error)}`)
+    })
+}
+
+function workspaceRootsFromInitialize(params: InitializeParams): string[] {
+  const uris = params.workspaceFolders?.length
+    ? params.workspaceFolders.map(folder => folder.uri)
+    : params.rootUri
+      ? [params.rootUri]
+      : []
+  const roots = uris.map(uri => URI.parse(uri).fsPath)
+  if (roots.length === 0 && params.rootPath) {
+    roots.push(params.rootPath)
+  }
+  if (roots.length === 0) {
+    roots.push(process.cwd())
+  }
+  const normalized = roots.map(root => path.resolve(root))
+  return normalized.filter((root, index) => normalized.indexOf(root) === index)
+}
+
+async function publishDiagnostics() {
+  resolver.reset()
+  const byFile = new Map<string, LspDiagnostic[]>()
+
+  for (const project of projects) {
+    try {
+      await project.bundle.flush(true)
+    } catch (error) {
+      connection.console.warn(
+        `maa-lsp: bundle.flush failed for ${project.root.dir}: ${String(error)}`
+      )
+    }
+    const diags = performDiagnostic(project.bundle, {})
+    for (const diag of diags) {
+      const [start, end, brief] = await buildDiagnosticMessage(
+        project.root.workspaceRoot as AbsolutePath,
+        diag,
+        (file, offset) => resolver.resolve(file, offset),
+        {}
+      )
+      const list = byFile.get(diag.file) ?? []
+      list.push({
+        severity: diag.level === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
+        range: Range.create(start[0], start[1], end[0], end[1]),
+        message: brief,
+        source: 'maa'
+      })
+      byFile.set(diag.file, list)
+    }
+  }
+
   const nextUris = new Set<string>()
   for (const [file, list] of byFile) {
     const uri = URI.file(file).toString()
@@ -264,19 +357,16 @@ async function toLocation(file: string, offset: number, length: number): Promise
   return Location.create(URI.file(file).toString(), Range.create(sl, sc, el, ec))
 }
 
-async function getTaskHover(task: TaskName): Promise<string> {
-  if (!bundle || task.length === 0) {
+async function getTaskHover(project: ProjectBundle, task: TaskName): Promise<string> {
+  if (task.length === 0) {
     return ''
   }
-  const topLayer = bundle.topLayer
-  const taskInfos = topLayer.getTask(task)
+  const taskInfos = project.bundle.topLayer.getTask(task)
   const parts: string[] = []
   for (const { layer, infos } of taskInfos) {
     for (const info of infos) {
-      let content: string
-      try {
-        content = await fs.readFile(info.file, 'utf8')
-      } catch {
+      const content = await loader.get(info.file)
+      if (content === null) {
         continue
       }
       const starts = computeLineStarts(content)
@@ -286,7 +376,7 @@ async function getTaskHover(task: TaskName): Promise<string> {
         .split('\n')
         .slice(beginLine, endLine + 1)
         .join('\n')
-      parts.push(`${path.relative(workspaceRoot, layer.root) || '.'}
+      parts.push(`${path.relative(project.root.workspaceRoot, layer.root) || '.'}
 
 \`\`\`json
 ${slice}
@@ -294,7 +384,7 @@ ${slice}
 `)
     }
   }
-  const final = bundle.evalTask(task)
+  const final = project.bundle.evalTask(task)
   if (final && Object.keys(final).length > 0) {
     parts.push(`merged
 
@@ -310,31 +400,65 @@ async function locateAndResolve(
   uri: string,
   line: number,
   character: number
-): Promise<{ file: string; offset: number } | null> {
-  if (!bundle) {
-    return null
-  }
-  await bundle.flush(true)
+): Promise<{ project: ProjectBundle; file: string; offset: number } | null> {
+  resolver.reset()
   const file = URI.parse(uri).fsPath as AbsolutePath
-  const layerInfo = bundle.locateLayer(file)
-  if (!layerInfo) {
-    return null
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    if (!project.bundle.locateLayer(file)) {
+      continue
+    }
+    const offset = await resolver.positionToOffset(file, line, character)
+    return { project, file, offset }
   }
-  const offset = await resolver.positionToOffset(file, line, character)
-  return { file, offset }
+  return null
 }
 
 connection.onInitialize(params => {
-  const rootUri = params.rootUri ?? params.workspaceFolders?.[0]?.uri ?? null
-  void setupBundle(rootUri).catch(err => {
-    connection.console.error(`maa-lsp: setupBundle failed: ${String(err)}`)
-  })
+  workspaceRoots = workspaceRootsFromInitialize(params)
+  clientSupportsWorkspaceFolders = params.capabilities.workspace?.workspaceFolders === true
   return {
     capabilities: {
-      textDocumentSync: TextDocumentSyncKind.Full,
+      textDocumentSync: TextDocumentSyncKind.Incremental,
       definitionProvider: true,
-      hoverProvider: true
+      hoverProvider: true,
+      workspace: {
+        workspaceFolders: {
+          supported: true,
+          changeNotifications: true
+        }
+      }
     }
+  }
+})
+
+connection.onInitialized(() => {
+  if (clientSupportsWorkspaceFolders) {
+    connection.workspace.onDidChangeWorkspaceFolders(event => {
+      const removed = new Set(
+        event.removed.map(folder => path.resolve(URI.parse(folder.uri).fsPath))
+      )
+      workspaceRoots = workspaceRoots.filter(root => !removed.has(path.resolve(root)))
+      for (const folder of event.added) {
+        const root = path.resolve(URI.parse(folder.uri).fsPath)
+        if (!workspaceRoots.includes(root)) {
+          workspaceRoots.push(root)
+        }
+      }
+      queueWorkspaceRefresh()
+    })
+  }
+  queueWorkspaceRefresh()
+})
+
+connection.onDidChangeWatchedFiles(params => {
+  if (
+    params.changes.some(
+      change =>
+        change.type !== FileChangeType.Changed && isInterfaceFile(URI.parse(change.uri).fsPath)
+    )
+  ) {
+    queueWorkspaceRefresh()
   }
 })
 
@@ -344,21 +468,21 @@ connection.onDefinition(async params => {
     params.position.line,
     params.position.character
   )
-  if (!ctx || !bundle) {
+  if (!ctx) {
     return null
   }
+  const bundle = ctx.project.bundle
   const layerInfo = bundle.locateLayer(ctx.file as AbsolutePath)
   if (!layerInfo) {
     return null
   }
   const [layer, fileName, isDefault] = layerInfo
-  const topLayer = bundle.topLayer
   const decls = layer.mergedDecls.filter(d => d.file === fileName)
   const refs = layer.mergedRefs.filter(r => r.file === fileName)
   const decl = findDeclRef(decls, ctx.offset)
   const ref = findDeclRef(refs, ctx.offset)
-  const allDecls = topLayer.mergedAllDecls
-  const allRefs = topLayer.mergedAllRefs
+  const allDecls = bundle.topLayer.mergedAllDecls
+  const allRefs = bundle.topLayer.mergedAllRefs
   if (decl) {
     if (isDefault && decl.type === 'task.decl') {
       return null
@@ -379,9 +503,10 @@ connection.onHover(async params => {
     params.position.line,
     params.position.character
   )
-  if (!ctx || !bundle) {
+  if (!ctx) {
     return null
   }
+  const bundle = ctx.project.bundle
   const layerInfo = bundle.locateLayer(ctx.file as AbsolutePath)
   if (!layerInfo) {
     return null
@@ -405,15 +530,17 @@ connection.onHover(async params => {
   if (!task) {
     return null
   }
-  const content = await getTaskHover(task)
+  const content = await getTaskHover(ctx.project, task)
   if (!content) {
     return null
   }
   return { contents: { kind: MarkupKind.Markdown, value: content } }
 })
 
-connection.onShutdown(() => {
-  void teardownBundle()
+connection.onShutdown(async () => {
+  await refreshQueue
+  await publishQueue
+  await teardownProjects()
 })
 
 connection.listen()

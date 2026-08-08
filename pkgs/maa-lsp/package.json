@@ -1,6 +1,6 @@
 {
   "name": "@nekosu/maa-lsp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/server.mjs",
@@ -9,11 +9,13 @@
   },
   "scripts": {
     "build": "tsdown",
-    "lint": "tsc -p . --noEmit"
+    "lint": "tsc -p . --noEmit",
+    "test": "pnpm build && node --test test/*.test.mjs"
   },
   "dependencies": {
     "@nekosu/maa-pipeline-manager": "^1.0.12",
     "vscode-languageserver": "^9.0.0",
+    "vscode-languageserver-textdocument": "^1.0.12",
     "vscode-uri": "^3.0.0"
   }
 }

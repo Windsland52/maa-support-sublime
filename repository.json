@@ -1,0 +1,19 @@
+{
+  "$schema": "sublime://packagecontrol.io/schemas/repository",
+  "schema_version": "4.0.0",
+  "packages": [
+    {
+      "name": "MaaLSP",
+      "details": "https://github.com/Windsland52/maa-support-sublime",
+      "description": "MaaFramework pipeline diagnostics, navigation and hover support for Sublime Text.",
+      "author": "Windsland52",
+      "labels": ["linting", "text navigation"],
+      "releases": [
+        {
+          "asset": "MaaLSP.sublime-package",
+          "sublime_text": ">=4000"
+        }
+      ]
+    }
+  ]
+}

@@ -1,34 +1,55 @@
 # MaaLSP (Sublime Text plugin)
 
-Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 包拉起 maa-lsp 语言服务器，为 MaaFramework pipeline / interface JSON 提供 schema 校验、定义跳转和悬停预览。
+Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 包拉起内置的 maa-lsp，为 MaaFramework pipeline / interface JSON 提供诊断、定义跳转和悬停预览。
 
 ## 前置条件
 
-1. **Sublime Text 4**（需 Python 3.8+ 插件宿主）
+1. **Sublime Text 4**
 2. **LSP** 包 — 通过 Package Control 安装 `LSP`
-3. **Node.js** — 需在系统 PATH 中可执行（`node --version`）
-4. **maa-lsp 构建** — 在仓库根目录运行 `pnpm install && pnpm build`，产物为 `pkgs/maa-lsp/dist/server.mjs`
+3. **Node.js 20.19.0 或更高版本** — `node` 默认需在系统 PATH 中
 
-## 安装
+用户不需要安装 pnpm，也不需要单独构建 maa-lsp。
 
-将 `pkgs/sublime` 符号链接到 Sublime Packages 目录，包名必须为 `MaaLSP`（与 settings 文件名一致）：
+## 用户安装
+
+### GitHub Release
+
+1. 从 [GitHub Releases](https://github.com/Windsland52/maa-support-sublime/releases) 下载 `MaaLSP.sublime-package`。
+2. 在 Sublime Text 中打开 `Preferences > Browse Packages…`，进入其同级的 `Installed Packages` 目录。
+3. 把文件复制到 `Installed Packages/MaaLSP.sublime-package`。
+4. 重启 Sublime Text。
+
+插件会在启动 LSP 前把内置的 `server.mjs` 解压到 Sublime cache，因此压缩安装和 Package Control 安装使用同一套产物。
+
+### Package Control
+
+正式收录到 Package Control 默认 channel 前，可以先添加本项目的软件源：
+
+1. 执行 `Package Control: Add Repository`；
+2. 输入 `https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json`；
+3. 执行 `Package Control: Install Package` 并选择 `MaaLSP`。
+
+默认 channel 收录后将不再需要第 1、2 步。
+
+## 开发安装
+
+先在仓库根目录运行：
 
 ```powershell
-# Windows (ST4)
-$pkgs = Join-Path $env:APPDATA "Sublime Text\Packages\MaaLSP"
-New-Item -ItemType SymbolicLink -Path $pkgs -Target "C:\github\maa-support-sublime\pkgs\sublime"
+pnpm install
+pnpm build
 ```
 
-```bash
-# macOS / Linux
-ln -s /path/to/maa-support-sublime/pkgs/sublime ~/Library/Application\ Support/Sublime\ Text/Packages/MaaLSP
-```
+再把 `pkgs/sublime` 符号链接到 Sublime Packages 目录，包名必须为 `MaaLSP`：
 
-重启 Sublime Text。
+```powershell
+$dest = Join-Path $env:APPDATA "Sublime Text\Packages\MaaLSP"
+New-Item -ItemType SymbolicLink -Path $dest -Target "C:\github\maa-support-sublime\pkgs\sublime"
+```
 
 ## 配置
 
-插件默认在 `pkgs/maa-lsp/dist/server.mjs`（相对插件目录）查找 server。如路径不符，在 `MaaLSP.sublime-settings`（User 覆盖）中设置：
+发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，在 `MaaLSP.sublime-settings` 的 User 设置中指定：
 
 ```json
 {
@@ -36,7 +57,7 @@ ln -s /path/to/maa-support-sublime/pkgs/sublime ~/Library/Application\ Support/S
 }
 ```
 
-若 `node` 不在 PATH，可直接覆盖 `command`：
+若 `node` 不在 PATH，可覆盖命令：
 
 ```json
 {
@@ -44,12 +65,23 @@ ln -s /path/to/maa-support-sublime/pkgs/sublime ~/Library/Application\ Support/S
 }
 ```
 
+## 项目发现
+
+行为与 `maa-support-extension` 对齐：
+
+- 扫描所有 workspace folder；
+- 递归查找任意深度的 `interface.json` 和 `interface.jsonc`；
+- 跳过隐藏目录、`node_modules`、`MaaUtils`、`MaaDeps`；
+- 同时加载扫描到的所有 interface 项目；
+- 从各项目的 `config/maa_pi_config.json` 读取 controller/resource，resource 无效时使用第一个可用项。
+
 ## 功能
 
-| LSP 能力         | 说明                                                 |
-| ---------------- | ---------------------------------------------------- |
-| Diagnostics      | interface.json / pipeline JSON schema 校验，精确定位 |
-| Go to Definition | 在 `next` / `target` / `anchor` 引用上跳转声明       |
-| Hover            | task 定义片段 + merged JSON 预览                     |
+| LSP 能力         | 说明                                                           |
+| ---------------- | -------------------------------------------------------------- |
+| Diagnostics      | interface / pipeline 校验，支持未保存内容                      |
+| Go to Definition | 在 task / target / anchor / ROI / locale 引用上跳转声明        |
+| Hover            | task 定义片段与 merged JSON 预览，支持未保存内容               |
+| Multi-root       | 多 workspace、多 interface 项目同时加载，并按文件路由 LSP 请求 |
 
 > ⚠️ 本文档由 AI 生成，主要用于辅助 AI 理解项目。内容可能与实际代码不同步，请注意甄别。

@@ -1,18 +1,43 @@
 # maa-support-sublime (mss)
 
-Sublime Text 插件 + maa-lsp + 跨编辑器浏览器 UI，面向 MaaFramework pipeline 开发。
+Sublime Text 插件 + maa-lsp，面向 MaaFramework pipeline 开发。
 
 > ⚠️ 本文档由 AI 生成，主要用于辅助 AI 理解项目。内容可能与实际代码不同步，请注意甄别。
 
-## 结构（拟定，待确认）
+## 当前 MVP
 
-- `pkgs/maa-lsp` — Node LSP server（schema 校验 / 定义跳转 / 诊断），复用 `@nekosu/maa-pipeline-manager` + `@nekosu/maa-types`
-- `pkgs/sublime` — Sublime Text 插件（Python）：拉起 maa-lsp、起本地 web 服务、开浏览器、IPC 桥
-- `pkgs/web-server` — 本地 HTTP/WebSocket 服务，serve web-ui + 浏览器↔sublime IPC
-- `pkgs/web-ui` — 浏览器 UI（Vue/TS）：执行面板 + mla 前端（复用 `@windsland52/maa-log-*`）
+- Maa pipeline/interface 诊断
+- task、anchor、ROI、locale 引用的定义跳转
+- task 定义和合并结果的悬停预览
+- 支持未保存的编辑器缓冲区
+- 递归发现所有 workspace folder 中的 Maa interface 项目
+- 可直接安装的 `MaaLSP.sublime-package`
+
+资源发现与 `maa-support-extension` 对齐：递归查找 `interface.json` / `interface.jsonc`，跳过隐藏目录、`node_modules`、`MaaUtils` 和 `MaaDeps`。每个项目从 `config/maa_pi_config.json` 读取 controller/resource 选择。
+
+## 结构
+
+- `pkgs/maa-lsp` — 可独立运行的 Node LSP server
+- `pkgs/sublime` — Sublime Text LSP 插件
+- `scripts/build-package.mjs` — 生成 Sublime 安装包
+- `docs` — 实现状态、使用约束和 TODO
+
+浏览器执行面板、日志 UI 和 Sublime IPC 不在当前 MVP 范围内。
+
+## 开发
+
+```bash
+pnpm install
+pnpm lint
+pnpm test
+pnpm package:sublime
+```
+
+安装包输出到 `release/MaaLSP.sublime-package`。开发态安装和用户安装方式见 [`pkgs/sublime/README.md`](pkgs/sublime/README.md)。
+
+公开仓库：<https://github.com/Windsland52/maa-support-sublime>
 
 ## 上游
 
-- 执行层：`@nekosu/maa-server`
-- LSP 核心：`@nekosu/maa-pipeline-manager` + `@nekosu/maa-types`
-- mla 前端：`@windsland52/maa-log-*`
+- LSP 核心：`@nekosu/maa-pipeline-manager`
+- 对齐实现：`maa-support-extension`
