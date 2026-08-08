@@ -34,7 +34,7 @@
 
 Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先复用 PATH 中满足版本的 Node；找不到时由 `lsp_utils` 提供隔离下载，不修改系统 Node。
 
-`Preferences: LSP-MaaFramework Settings` 打开用户覆盖设置；`sublime-package.json` 同时为包设置和 `.sublime-project` 中的 `settings.LSP.LSP-MaaFramework` 提供 schema。
+`Preferences: LSP-MaaFramework Settings` 打开用户覆盖设置；`sublime-package.json` 同时为包设置和 `.sublime-project` 中的 `settings.LSP.LSP-MaaFramework` 提供 schema。插件从 LSP context 的 `configuration.root_settings` 读取合并后的有效配置，并按 window 缓存给 native runtime、MaaLogAnalyzer 和命令使用；不再绕过 LSP 直接读取设置文件，因此项目级覆盖会作用于全部功能。会修改设置的命令仍写入 User settings，并同步刷新当前 window 的缓存。
 
 插件在 LSP 静态 JSON selector 之外执行 Maa 项目适用性检查：递归扫描 workspace，按 server 相同规则跳过隐藏目录、`node_modules`、`MaaUtils`、`MaaDeps`，仅发现 `interface.json` / `interface.jsonc` 后启动。无 workspace 时回退检查当前文件的祖先目录。
 

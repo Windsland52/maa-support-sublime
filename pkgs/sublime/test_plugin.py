@@ -103,7 +103,7 @@ class FakeRuntimeManager:
     def test_pipeline_recognition(self, window, task):
         self.recognition_tests.append(("pipeline", window, task))
 
-    def fetch_versions(self, callback):
+    def fetch_versions(self, _window, callback):
         callback(["5.12.2", "5.11.0"], {"5.11.0"})
 
     def shutdown(self):
@@ -364,10 +364,18 @@ class PluginTests(unittest.TestCase):
     def test_resolves_managed_node_runtime_before_start(self):
         server = Path(self.temp.name, "custom-server.mjs")
         server.write_text("", encoding="utf-8")
-        self.sublime.settings.values["server_path"] = str(server)
+        self.sublime.settings.values["server_path"] = "ignored-user-setting.mjs"
+        window = FakeWindow([self.temp.name])
         context = types.SimpleNamespace(
-            configuration=types.SimpleNamespace(env={}),
+            configuration=types.SimpleNamespace(
+                env={},
+                root_settings={
+                    "server_path": str(server),
+                    "maa_version": "5.11.0",
+                },
+            ),
             variables={},
+            view=FakeView(str(server), window),
         )
 
         self.plugin.LspMaaFrameworkPlugin.on_pre_start_async(context)
@@ -379,6 +387,10 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(context.variables["node_bin"], "managed-node")
         self.assertEqual(context.variables["server_path"], str(server))
         self.assertEqual(context.configuration.env, {"NODE_TEST_RUNTIME": "1"})
+        self.assertEqual(
+            self.plugin._settings_for_window(window)["maa_version"],
+            "5.11.0",
+        )
 
     def test_only_applies_to_workspaces_with_recursive_interface(self):
         workspace = Path(self.temp.name, "workspace")
@@ -388,6 +400,7 @@ class PluginTests(unittest.TestCase):
         view = types.SimpleNamespace(file_name=lambda: str(nested / "pipeline.json"))
         context = types.SimpleNamespace(
             base_applicable=True,
+            configuration=types.SimpleNamespace(root_settings={}),
             workspace_folders=[types.SimpleNamespace(path=str(workspace))],
             view=view,
         )
@@ -404,11 +417,13 @@ class PluginTests(unittest.TestCase):
         view = types.SimpleNamespace(file_name=lambda: str(workspace / "data.json"))
         generic_context = types.SimpleNamespace(
             base_applicable=True,
+            configuration=types.SimpleNamespace(root_settings={}),
             workspace_folders=[types.SimpleNamespace(path=str(workspace))],
             view=view,
         )
         selector_context = types.SimpleNamespace(
             base_applicable=False,
+            configuration=types.SimpleNamespace(root_settings={}),
             workspace_folders=[],
             view=view,
         )
@@ -632,8 +647,11 @@ class PluginTests(unittest.TestCase):
         config.write_text('{"resource":"Default"}', encoding="utf-8")
         server = Path(self.temp.name, "server.mjs")
         server.write_text("", encoding="utf-8")
-        self.sublime.settings.values["server_path"] = str(server)
         window = FakeWindow([str(workspace)])
+        self.plugin._effective_settings_by_window[window.id()] = {
+            **self.plugin.PLUGIN_DEFAULTS,
+            "server_path": str(server),
+        }
 
         self.plugin.MaaFrameworkCheckEnvironmentCommand(window).run()
 
@@ -788,7 +806,7 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(window.labels, ["○ Alpha", "○ Beta"])
         window.on_done(1)
 
-        self.assertEqual(self.plugin._break_tasks(project), ["Beta"])
+        self.assertEqual(self.plugin._break_tasks(project, window), ["Beta"])
         self.assertEqual(runtime.breakpoints, [["Beta"]])
 
     def test_selects_native_version_and_registry(self):

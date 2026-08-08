@@ -35,12 +35,54 @@ NPM_REGISTRIES = {
     "npm": "https://registry.npmjs.org",
     "cnpm": "https://registry.npmmirror.com",
 }
+PLUGIN_DEFAULTS = {
+    "server_path": "auto",
+    "maa_version": "5.12.2",
+    "maa_log_tools_version": "1.3.0",
+    "npm_registry": NPM_REGISTRIES["npm"],
+    "admin_mode": False,
+    "debug_mode": True,
+    "save_draw": False,
+    "agent_timeout": 30000,
+    "break_tasks": {},
+}
 INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
 LOG_TAIL_LIMIT = 8 * 1024 * 1024
 MAA_LOG_ANALYZER_URL = "https://mla.maafw.com"
 _known_maa_workspaces: set[Path] = set()
+_effective_settings_by_window: dict[int, dict[str, Any]] = {}
+
+
+def _remember_context_configuration(context: Any) -> None:
+    view = getattr(context, "view", None)
+    window = view.window() if view and hasattr(view, "window") else None
+    root_settings = getattr(context.configuration, "root_settings", None)
+    if window and isinstance(root_settings, dict):
+        _effective_settings_by_window[window.id()] = {
+            **PLUGIN_DEFAULTS,
+            **root_settings,
+        }
+
+
+def _settings_for_window(window) -> dict[str, Any]:
+    if window:
+        cached = _effective_settings_by_window.get(window.id())
+        if cached is not None:
+            return cached
+    return PLUGIN_DEFAULTS
+
+
+def _set_user_setting(window, name: str, value: Any) -> None:
+    settings = sublime.load_settings(SETTINGS_FILE)
+    settings.set(name, value)
+    sublime.save_settings(SETTINGS_FILE)
+    if window:
+        _effective_settings_by_window[window.id()] = {
+            **_settings_for_window(window),
+            name: value,
+        }
 
 
 class MaaRuntimeManager:
@@ -60,12 +102,12 @@ class MaaRuntimeManager:
         self.window = window
         self.project = project
         try:
-            settings = sublime.load_settings(SETTINGS_FILE)
+            settings = _settings_for_window(window)
             if settings.get("admin_mode", False) and os.name == "nt" and not _is_admin():
                 raise RuntimeError(
                     "admin mode requires restarting Sublime Text with Run as administrator"
                 )
-            node, module_path = self._prepare_native()
+            node, module_path = self._prepare_native(window)
             runtime = LspMaaFrameworkPlugin._resolve_runtime_path()
             if runtime is None:
                 raise RuntimeError("bundled runtime.mjs not found")
@@ -80,7 +122,7 @@ class MaaRuntimeManager:
                     "debugMode": settings.get("debug_mode", True),
                     "saveDraw": settings.get("save_draw", False),
                     "logDir": str(log_dir),
-                    "breakTasks": _break_tasks(project),
+                    "breakTasks": _break_tasks(project, window),
                     "agentTimeout": settings.get("agent_timeout", 30000),
                 },
                 self._started,
@@ -257,9 +299,9 @@ class MaaRuntimeManager:
         except Exception:
             process.terminate()
 
-    def fetch_versions(self, callback) -> None:
+    def fetch_versions(self, window, callback) -> None:
         try:
-            settings = sublime.load_settings(SETTINGS_FILE)
+            settings = _settings_for_window(window)
             registry = settings.get("npm_registry", NPM_REGISTRIES["npm"])
             node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
             command = [str(part) for part in node.npm_command()]
@@ -308,8 +350,8 @@ class MaaRuntimeManager:
                 )
             )
 
-    def _prepare_native(self):
-        settings = sublime.load_settings(SETTINGS_FILE)
+    def _prepare_native(self, window):
+        settings = _settings_for_window(window)
         version = settings.get("maa_version", "5.12.2")
         registry = settings.get("npm_registry", "https://registry.npmjs.org")
         if not isinstance(version, str) or not re.fullmatch(
@@ -453,7 +495,7 @@ class MaaLogAnalyzerManager:
 
     def _inspect(self, project: Path, window) -> None:
         try:
-            node, cli, version = self._prepare_tools()
+            node, cli, version = self._prepare_tools(window)
             completed = subprocess.run(
                 [
                     str(node.node_binary_path()),
@@ -494,8 +536,8 @@ class MaaLogAnalyzerManager:
                 )
             )
 
-    def _prepare_tools(self):
-        settings = sublime.load_settings(SETTINGS_FILE)
+    def _prepare_tools(self, window):
+        settings = _settings_for_window(window)
         version = settings.get("maa_log_tools_version", "1.3.0")
         registry = settings.get("npm_registry", NPM_REGISTRIES["npm"])
         if not isinstance(version, str) or not re.fullmatch(
@@ -931,21 +973,19 @@ def _project_config(project: Path) -> Optional[dict[str, Any]]:
     return _load_json_object(config_file) if config_file.is_file() else {}
 
 
-def _break_tasks(project: Path) -> list[str]:
-    value = sublime.load_settings(SETTINGS_FILE).get("break_tasks", {})
+def _break_tasks(project: Path, window) -> list[str]:
+    value = _settings_for_window(window).get("break_tasks", {})
     if not isinstance(value, dict):
         return []
     tasks = value.get(str(project.resolve()))
     return [task for task in tasks if isinstance(task, str)] if isinstance(tasks, list) else []
 
 
-def _save_break_tasks(project: Path, tasks: list[str]) -> None:
-    settings = sublime.load_settings(SETTINGS_FILE)
-    value = settings.get("break_tasks", {})
+def _save_break_tasks(project: Path, tasks: list[str], window) -> None:
+    value = _settings_for_window(window).get("break_tasks", {})
     mapping = dict(value) if isinstance(value, dict) else {}
     mapping[str(project.resolve())] = tasks
-    settings.set("break_tasks", mapping)
-    sublime.save_settings(SETTINGS_FILE)
+    _set_user_setting(window, "break_tasks", mapping)
 
 
 def _write_project_config(project: Path, config: dict[str, Any]) -> Optional[str]:
@@ -1175,7 +1215,7 @@ def _environment_report(window) -> str:
         lines.append("[FAIL] LSP package is not installed")
         failed = True
 
-    server = LspMaaFrameworkPlugin._resolve_server_path()
+    server = LspMaaFrameworkPlugin._resolve_server_path(_settings_for_window(window))
     if server:
         lines.append(f"[OK] maa-lsp server: {server}")
     else:
@@ -1607,7 +1647,7 @@ class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
         if not self._tasks:
             sublime.status_message("MaaFramework: no pipeline tasks found")
             return
-        active = set(_break_tasks(self._project))
+        active = set(_break_tasks(self._project, self.window))
         self.window.show_quick_panel(
             [f"{'●' if task in active else '○'} {task}" for task in self._tasks],
             self._on_done,
@@ -1617,7 +1657,7 @@ class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
         if index < 0 or index >= len(self._tasks):
             return
         task = self._tasks[index]
-        active = set(_break_tasks(self._project))
+        active = set(_break_tasks(self._project, self.window))
         if task in active:
             active.remove(task)
             enabled = False
@@ -1625,7 +1665,7 @@ class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
             active.add(task)
             enabled = True
         tasks = sorted(active, key=str.casefold)
-        _save_break_tasks(self._project, tasks)
+        _save_break_tasks(self._project, tasks, self.window)
         _runtime_manager.set_breakpoints(tasks)
         sublime.status_message(
             f"MaaFramework: {'enabled' if enabled else 'disabled'} breakpoint {task}"
@@ -1635,14 +1675,16 @@ class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
 class MaaFrameworkSelectVersionCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         sublime.status_message("MaaFramework: fetching native versions…")
-        sublime.set_timeout_async(lambda: _runtime_manager.fetch_versions(self._show_versions))
+        sublime.set_timeout_async(
+            lambda: _runtime_manager.fetch_versions(self.window, self._show_versions)
+        )
 
     def _show_versions(self, versions: list[str], installed: set[str]) -> None:
         if not versions:
             sublime.status_message("MaaFramework: registry returned no compatible versions")
             return
         self._versions = versions
-        current = sublime.load_settings(SETTINGS_FILE).get("maa_version", "5.12.2")
+        current = _settings_for_window(self.window).get("maa_version", "5.12.2")
         labels = []
         for version in versions:
             tags = []
@@ -1658,12 +1700,10 @@ class MaaFrameworkSelectVersionCommand(sublime_plugin.WindowCommand):
         if index < 0 or index >= len(self._versions):
             return
         version = self._versions[index]
-        settings = sublime.load_settings(SETTINGS_FILE)
-        if settings.get("maa_version") == version:
+        if _settings_for_window(self.window).get("maa_version") == version:
             return
         _runtime_manager.shutdown()
-        settings.set("maa_version", version)
-        sublime.save_settings(SETTINGS_FILE)
+        _set_user_setting(self.window, "maa_version", version)
         sublime.status_message(
             f"MaaFramework: selected {version}; it will be prepared on next start"
         )
@@ -1671,7 +1711,7 @@ class MaaFrameworkSelectVersionCommand(sublime_plugin.WindowCommand):
 
 class MaaFrameworkSelectRegistryCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
-        current = sublime.load_settings(SETTINGS_FILE).get("npm_registry", NPM_REGISTRIES["npm"])
+        current = _settings_for_window(self.window).get("npm_registry", NPM_REGISTRIES["npm"])
         self._registries = list(NPM_REGISTRIES.items())
         self.window.show_quick_panel(
             [
@@ -1685,9 +1725,7 @@ class MaaFrameworkSelectRegistryCommand(sublime_plugin.WindowCommand):
         if index < 0 or index >= len(self._registries):
             return
         name, registry = self._registries[index]
-        settings = sublime.load_settings(SETTINGS_FILE)
-        settings.set("npm_registry", registry)
-        sublime.save_settings(SETTINGS_FILE)
+        _set_user_setting(self.window, "npm_registry", registry)
         sublime.status_message(f"MaaFramework: selected {name} registry {registry}")
 
 
@@ -1697,11 +1735,9 @@ class _MaaFrameworkModeToggle:
     default = False
 
     def run(self) -> None:
-        settings = sublime.load_settings(SETTINGS_FILE)
-        enabled = not bool(settings.get(self.setting, self.default))
+        enabled = not bool(_settings_for_window(self.window).get(self.setting, self.default))
         _runtime_manager.shutdown()
-        settings.set(self.setting, enabled)
-        sublime.save_settings(SETTINGS_FILE)
+        _set_user_setting(self.window, self.setting, enabled)
         suffix = (
             " (restart Sublime as administrator before starting)"
             if (self.setting == "admin_mode" and enabled and os.name == "nt" and not _is_admin())
@@ -1998,6 +2034,7 @@ class LspMaaFrameworkPlugin(LspPlugin):
     def is_applicable_async(cls, context: IsApplicableContext) -> bool:
         if not super().is_applicable_async(context):
             return False
+        _remember_context_configuration(context)
         if any(_workspace_has_interface(Path(folder.path)) for folder in context.workspace_folders):
             return True
         file_name = context.view.file_name()
@@ -2005,7 +2042,8 @@ class LspMaaFrameworkPlugin(LspPlugin):
 
     @classmethod
     def on_pre_start_async(cls, context: OnPreStartContext) -> None:
-        server_path = cls._resolve_server_path()
+        _remember_context_configuration(context)
+        server_path = cls._resolve_server_path(context.configuration.root_settings)
         if server_path is None:
             raise PluginStartError(
                 "maa-lsp: bundled server.mjs not found. "
@@ -2018,8 +2056,7 @@ class LspMaaFrameworkPlugin(LspPlugin):
         context.variables["server_path"] = str(server_path)
 
     @classmethod
-    def _resolve_server_path(cls) -> Path | None:
-        settings = sublime.load_settings(SETTINGS_FILE)
+    def _resolve_server_path(cls, settings: dict[str, Any]) -> Path | None:
         configured = settings.get("server_path") or ""
         if configured and configured != "auto":
             path = Path(configured)
@@ -2074,4 +2111,5 @@ def plugin_loaded() -> None:
 
 def plugin_unloaded() -> None:
     _runtime_manager.shutdown()
+    _effective_settings_by_window.clear()
     LspMaaFrameworkPlugin.unregister()
