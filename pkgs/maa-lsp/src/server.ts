@@ -893,6 +893,7 @@ connection.onInitialize(params => {
       completionProvider: {
         triggerCharacters: ['"', '[', ']', '$']
       },
+      codeLensProvider: { resolveProvider: false },
       definitionProvider: true,
       hoverProvider: true,
       referencesProvider: true,
@@ -1032,6 +1033,67 @@ connection.onWorkspaceSymbol(async params => {
     }
   }
   return symbols
+})
+
+connection.onCodeLens(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    const layerInfo = project.bundle.locateLayer(file)
+    if (!layerInfo) {
+      continue
+    }
+
+    const lenses = []
+    const [layer, fileName, isDefault] = layerInfo
+    if (!isDefault) {
+      const referenceCounts = new Map<string, number>()
+      for (const ref of project.bundle.topLayer.mergedAllRefs) {
+        const task = extractTaskRef(ref)
+        if (task) {
+          referenceCounts.set(task, (referenceCounts.get(task) ?? 0) + 1)
+        }
+      }
+      for (const [task, taskInfos] of Object.entries(layer.tasks)) {
+        for (const taskInfo of taskInfos) {
+          if (taskInfo.file !== fileName) {
+            continue
+          }
+          const location = await toLocation(
+            taskInfo.file,
+            taskInfo.prop.offset,
+            taskInfo.prop.length
+          )
+          const count = referenceCounts.get(task) ?? 0
+          lenses.push({
+            range: location.range,
+            command: {
+              title: `${count} reference${count === 1 ? '' : 's'}`,
+              command: ''
+            }
+          })
+        }
+      }
+    }
+
+    for (const decl of project.bundle.info.decls) {
+      if (decl.file !== file || decl.type !== 'interface.resource') {
+        continue
+      }
+      const location = await toLocation(decl.file, decl.location.offset, decl.location.length)
+      const active = decl.name === project.bundle.activeResource
+      lenses.push({
+        range: location.range,
+        command: {
+          title: active ? 'Active resource' : `Resource: ${decl.name}`,
+          command: ''
+        }
+      })
+    }
+    return lenses
+  }
+  return null
 })
 
 connection.onDefinition(async params => {

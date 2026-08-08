@@ -152,6 +152,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
     assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
+    assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: false })
 
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
     const loaded = await client.waitFor(
@@ -665,6 +666,22 @@ test('completes pipeline tasks and interface references', async () => {
     )
     assert.equal(symbols.result[0].kind, 5)
     assert.match(symbols.result[0].containerName, /^tasks\.json:\d+$/)
+
+    const pipelineLenses = await client.request('textDocument/codeLens', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href }
+    })
+    assert.deepEqual(pipelineLenses.result.map(lens => lens.command.title).sort(), [
+      '0 references',
+      '0 references',
+      '2 references'
+    ])
+    const interfaceLenses = await client.request('textDocument/codeLens', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href }
+    })
+    assert.deepEqual(
+      interfaceLenses.result.map(lens => lens.command.title),
+      ['Active resource']
+    )
 
     await client.shutdown()
     client = undefined

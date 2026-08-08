@@ -40,7 +40,7 @@
 - [x] Completion
 - [x] References
 - [x] Workspace Symbol
-- [ ] Code Lens
+- [x] Code Lens
 - [ ] Inlay Hint
 - [ ] Code Action
 - [ ] Document Link
