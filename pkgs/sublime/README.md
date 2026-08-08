@@ -76,6 +76,16 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 普通 JSON workspace 不会启动 Maa LSP；必须在 workspace 内递归发现 interface 文件，或当前文件的祖先目录中存在 interface 文件。
 
+## 项目选择
+
+命令面板提供以下命令：
+
+- `MaaFramework: Select Controller`
+- `MaaFramework: Select Resource`
+- `MaaFramework: Select Locale`
+
+命令会扫描所有 workspace folder 中的 interface，并在候选项中显示项目相对目录。选中后写入该项目的 `config/maa_pi_config.json`，同时保留文件中已有的其他配置字段。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from typing import Any, Optional
 
 import sublime
+import sublime_plugin
 from LSP.plugin import IsApplicableContext
 from LSP.plugin import LspPlugin
 from LSP.plugin import OnPreStartContext
@@ -41,6 +44,177 @@ def _workspace_has_interface(root: Path) -> bool:
 
 def _file_has_interface_ancestor(file: Path) -> bool:
     return any(any((parent / name).is_file() for name in INTERFACE_FILES) for parent in file.parents)
+
+
+def _strip_jsonc(text: str) -> str:
+    without_comments: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if in_string:
+            without_comments.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            without_comments.append(char)
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            index += 2
+            while index < len(text) and text[index] not in "\r\n":
+                index += 1
+            continue
+        if char == "/" and next_char == "*":
+            index += 2
+            while index + 1 < len(text) and text[index : index + 2] != "*/":
+                index += 1
+            index = min(index + 2, len(text))
+            continue
+        without_comments.append(char)
+        index += 1
+
+    cleaned = "".join(without_comments)
+    without_trailing_commas: list[str] = []
+    index = 0
+    in_string = False
+    escaped = False
+    while index < len(cleaned):
+        char = cleaned[index]
+        if in_string:
+            without_trailing_commas.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            index += 1
+            continue
+        if char == '"':
+            in_string = True
+            without_trailing_commas.append(char)
+            index += 1
+            continue
+        if char == ",":
+            lookahead = index + 1
+            while lookahead < len(cleaned) and cleaned[lookahead].isspace():
+                lookahead += 1
+            if lookahead < len(cleaned) and cleaned[lookahead] in "]}":
+                index += 1
+                continue
+        without_trailing_commas.append(char)
+        index += 1
+    return "".join(without_trailing_commas)
+
+
+def _load_json_object(file: Path) -> Optional[dict[str, Any]]:
+    try:
+        value = json.loads(_strip_jsonc(file.read_text(encoding="utf-8")))
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _iter_interface_files(workspace: Path):
+    try:
+        for current, directories, files in os.walk(workspace.resolve(), followlinks=False):
+            directories[:] = [name for name in directories if not _is_ignored_directory(name)]
+            for name in sorted(INTERFACE_FILES.intersection(files)):
+                yield Path(current, name)
+    except OSError:
+        return
+
+
+def _interface_values(interface: dict[str, Any], field: str) -> list[str]:
+    if field == "languages":
+        languages = interface.get(field)
+        return list(languages) if isinstance(languages, dict) else []
+    entries = interface.get(field)
+    if not isinstance(entries, list):
+        return []
+    return [
+        entry["name"]
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("name"), str)
+    ]
+
+
+class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
+    config_key = ""
+    interface_field = ""
+    item_name = "value"
+
+    def run(self) -> None:
+        self._choices: list[tuple[Path, str]] = []
+        labels: list[str] = []
+        for folder in self.window.folders():
+            workspace = Path(folder)
+            for interface_file in _iter_interface_files(workspace):
+                interface = _load_json_object(interface_file) or {}
+                try:
+                    project = str(interface_file.parent.relative_to(workspace)) or "."
+                except ValueError:
+                    project = str(interface_file.parent)
+                for value in _interface_values(interface, self.interface_field):
+                    self._choices.append((interface_file.parent, value))
+                    labels.append(f"{project} — {value}")
+        if not self._choices:
+            sublime.status_message(f"MaaFramework: no {self.item_name}s found")
+            return
+        self.window.show_quick_panel(labels, self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._choices):
+            return
+        project, value = self._choices[index]
+        config_file = project / "config" / "maa_pi_config.json"
+        config = _load_json_object(config_file) if config_file.is_file() else {}
+        if config is None:
+            sublime.status_message(
+                f"MaaFramework: cannot update invalid config {config_file}"
+            )
+            return
+        config[self.config_key] = value
+        try:
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            temporary = config_file.with_suffix(".json.tmp")
+            temporary.write_text(
+                json.dumps(config, ensure_ascii=False, indent=4) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(config_file)
+        except OSError as error:
+            sublime.status_message(f"MaaFramework: cannot update selection: {error}")
+            return
+        sublime.status_message(f"MaaFramework: selected {self.item_name} {value}")
+
+
+class MaaFrameworkSelectControllerCommand(_MaaFrameworkSelectCommand):
+    config_key = "controller"
+    interface_field = "controller"
+    item_name = "controller"
+
+
+class MaaFrameworkSelectResourceCommand(_MaaFrameworkSelectCommand):
+    config_key = "resource"
+    interface_field = "resource"
+    item_name = "resource"
+
+
+class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelectCommand):
+    config_key = "__locale"
+    interface_field = "languages"
+    item_name = "locale"
 
 
 class LspMaaFrameworkPlugin(LspPlugin):

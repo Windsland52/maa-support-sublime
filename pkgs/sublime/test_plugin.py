@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import tempfile
 import types
@@ -45,12 +46,32 @@ class FakeNodeManager:
         return FakeNodeRunner()
 
 
+class FakeWindowCommand:
+    def __init__(self, window):
+        self.window = window
+
+
+class FakeWindow:
+    def __init__(self, folders):
+        self._folders = folders
+        self.labels = []
+        self.on_done = None
+
+    def folders(self):
+        return self._folders
+
+    def show_quick_panel(self, labels, on_done):
+        self.labels = labels
+        self.on_done = on_done
+
+
 class FakeSublime(types.ModuleType):
     def __init__(self, cache):
         super().__init__("sublime")
         self.cache = cache
         self.settings = FakeSettings()
         self.server = b"first"
+        self.messages = []
 
     def load_settings(self, _name):
         return self.settings
@@ -60,6 +81,9 @@ class FakeSublime(types.ModuleType):
 
     def cache_path(self):
         return self.cache
+
+    def status_message(self, message):
+        self.messages.append(message)
 
 
 class PluginTests(unittest.TestCase):
@@ -74,7 +98,10 @@ class PluginTests(unittest.TestCase):
         lsp_plugin.PluginStartError = RuntimeError
         lsp_utils = types.ModuleType("lsp_utils")
         lsp_utils.NodeManager = FakeNodeManager
+        sublime_plugin = types.ModuleType("sublime_plugin")
+        sublime_plugin.WindowCommand = FakeWindowCommand
         sys.modules["sublime"] = self.sublime
+        sys.modules["sublime_plugin"] = sublime_plugin
         sys.modules["LSP"] = lsp
         sys.modules["LSP.plugin"] = lsp_plugin
         sys.modules["lsp_utils"] = lsp_utils
@@ -87,6 +114,7 @@ class PluginTests(unittest.TestCase):
 
     def tearDown(self):
         sys.modules.pop("sublime", None)
+        sys.modules.pop("sublime_plugin", None)
         sys.modules.pop("LSP", None)
         sys.modules.pop("LSP.plugin", None)
         sys.modules.pop("lsp_utils", None)
@@ -165,6 +193,81 @@ class PluginTests(unittest.TestCase):
 
         self.assertFalse(self.plugin.LspMaaFrameworkPlugin.is_applicable_async(generic_context))
         self.assertFalse(self.plugin.LspMaaFrameworkPlugin.is_applicable_async(selector_context))
+
+    def test_selects_interface_values_and_preserves_existing_config(self):
+        workspace = Path(self.temp.name, "workspace")
+        project = workspace / "apps" / "demo"
+        project.mkdir(parents=True)
+        (project / "interface.jsonc").write_text(
+            """
+            {
+                // Project choices may use JSONC.
+                "controller": [{ "name": "Adb" },],
+                "resource": [
+                    { "name": "Default", "path": "resource" },
+                    { "name": "Extra", "path": "extra" },
+                ],
+                "languages": {
+                    "English": "lang/en.json",
+                    "Chinese": "lang/zh.json",
+                },
+            }
+            """,
+            encoding="utf-8",
+        )
+        config_file = project / "config" / "maa_pi_config.json"
+        config_file.parent.mkdir()
+        config_file.write_text(
+            '{"controller":"Old","task":[{"name":"Keep"}]}',
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(workspace)])
+
+        resource = self.plugin.MaaFrameworkSelectResourceCommand(window)
+        resource.run()
+        self.assertEqual(
+            window.labels,
+            ["apps\\demo — Default", "apps\\demo — Extra"],
+        )
+        window.on_done(1)
+
+        locale = self.plugin.MaaFrameworkSelectLocaleCommand(window)
+        locale.run()
+        self.assertEqual(
+            window.labels,
+            ["apps\\demo — English", "apps\\demo — Chinese"],
+        )
+        window.on_done(1)
+
+        config = json.loads(config_file.read_text(encoding="utf-8"))
+        self.assertEqual(config["resource"], "Extra")
+        self.assertEqual(config["__locale"], "Chinese")
+        self.assertEqual(config["controller"], "Old")
+        self.assertEqual(config["task"], [{"name": "Keep"}])
+        self.assertIn("MaaFramework: selected resource Extra", self.sublime.messages)
+        self.assertIn("MaaFramework: selected locale Chinese", self.sublime.messages)
+
+    def test_does_not_overwrite_invalid_project_config(self):
+        workspace = Path(self.temp.name, "workspace")
+        project = workspace / "demo"
+        config_file = project / "config" / "maa_pi_config.json"
+        config_file.parent.mkdir(parents=True)
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default"}]}',
+            encoding="utf-8",
+        )
+        config_file.write_text("{ invalid", encoding="utf-8")
+        window = FakeWindow([str(workspace)])
+
+        command = self.plugin.MaaFrameworkSelectResourceCommand(window)
+        command.run()
+        window.on_done(0)
+
+        self.assertEqual(config_file.read_text(encoding="utf-8"), "{ invalid")
+        self.assertIn(
+            f"MaaFramework: cannot update invalid config {config_file}",
+            self.sublime.messages,
+        )
 
 
 if __name__ == "__main__":

@@ -53,7 +53,7 @@
 
 ## Sublime 命令与资源选择
 
-- [ ] controller/resource/locale 选择界面
+- [x] controller/resource/locale 选择界面
 - [ ] 活动项目和资源状态
 - [ ] Goto Task
 - [ ] task / expression 求值

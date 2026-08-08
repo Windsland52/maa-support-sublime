@@ -34,6 +34,10 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 插件在 LSP 静态 JSON selector 之外执行 Maa 项目适用性检查：递归扫描 workspace，按 server 相同规则跳过隐藏目录、`node_modules`、`MaaUtils`、`MaaDeps`，仅发现 `interface.json` / `interface.jsonc` 后启动。无 workspace 时回退检查当前文件的祖先目录。
 
+## 项目选择命令
+
+命令面板提供 `MaaFramework: Select Controller`、`Select Resource` 和 `Select Locale`。三个命令扫描所有 workspace folder 内的 interface，规则与 LSP 项目发现一致；quick panel 条目同时显示 interface 相对目录与候选名称。选择后保留 `config/maa_pi_config.json` 的其他字段，原子写入 `controller`、`resource` 或 `__locale`。LSP 对该配置的文件监听会立即应用 controller/resource 变化。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

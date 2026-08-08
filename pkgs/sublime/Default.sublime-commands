@@ -6,5 +6,17 @@
       "base_file": "${packages}/LSP-MaaFramework/LSP-MaaFramework.sublime-settings",
       "default": "// Settings in here override those in \"LSP-MaaFramework/LSP-MaaFramework.sublime-settings\"\n\n{\n\t$0\n}\n"
     }
+  },
+  {
+    "caption": "MaaFramework: Select Controller",
+    "command": "maa_framework_select_controller"
+  },
+  {
+    "caption": "MaaFramework: Select Resource",
+    "command": "maa_framework_select_resource"
+  },
+  {
+    "caption": "MaaFramework: Select Locale",
+    "command": "maa_framework_select_locale"
   }
 ]
