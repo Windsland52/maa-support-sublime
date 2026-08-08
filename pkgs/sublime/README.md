@@ -1,5 +1,55 @@
 # LSP-MaaFramework (Sublime Text plugin)
 
+`LSP-MaaFramework` starts its bundled MaaFramework language server through the community [LSP](https://github.com/sublimelsp/LSP) package. It provides language intelligence, project selection, MaaFramework runtime controls, recognition testing, and log analysis for pipeline/interface JSON and JSONC files.
+
+[中文说明](#中文说明)
+
+## Requirements
+
+1. **Sublime Text 4**
+2. The **LSP** package installed through Package Control
+3. **Node.js 20.19.0 or newer** on `PATH`; when unavailable, `lsp_utils` can offer a managed runtime for the language server
+
+Users do not need pnpm or a separate maa-lsp checkout. The package selects Sublime's Python 3.8 plugin host through its packaged `.python-version`.
+
+## Installation
+
+The Package Control default-channel submission is tracked in [sublimelsp/repository#169](https://github.com/sublimelsp/repository/pull/169). Until it is merged, add this repository URL with `Package Control: Add Repository`:
+
+```text
+https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json
+```
+
+Then run `Package Control: Install Package` and select `LSP-MaaFramework`.
+
+Alternatively, download `LSP-MaaFramework.sublime-package` from [GitHub Releases](https://github.com/Windsland52/maa-support-sublime/releases), place it in Sublime's sibling `Installed Packages` directory, and restart Sublime Text.
+
+Remove the obsolete `MaaLSP` 0.1.x package before installing `LSP-MaaFramework`; Package Control cannot automatically migrate between package names.
+
+## Quick start
+
+1. Open the whole MaaFramework project folder in Sublime Text. The workspace must contain an `interface.json` or `interface.jsonc` at any supported depth.
+2. Run `MaaFramework: Check Environment` from the command palette and confirm that the report ends in `PASS`.
+3. Open a pipeline JSON/JSONC file. Diagnostics, completion, hover, navigation, symbols, references, rename, formatting, Code Lens, Inlay Hints, Code Actions, document links, and color previews are available through normal LSP commands.
+4. Use `MaaFramework: Select Controller`, `Select Resource`, and `Select Locale` to update the active project's `config/maa_pi_config.json`.
+5. Open `MaaFramework: Control Panel` to manage and run the persistent task queue. The first run installs the selected `@maaxyz/maa-node` version into this plugin's cache.
+
+Additional command-palette tools cover task navigation/evaluation, runtime status and breakpoints, screenshots and crops, OCR/template/pipeline recognition tests, built-in log summaries, and the official MaaLogAnalyzer runtime inspection/web UI.
+
+## Configuration
+
+Run `Preferences: LSP-MaaFramework Settings` to edit user settings. Project-specific overrides belong under `settings.LSP.LSP-MaaFramework` in a `.sublime-project` file. Both locations use the package's settings schema.
+
+The bundled `server.mjs` is used by installed packages. Development checkouts fall back to the adjacent `maa-lsp/dist/server.mjs`; `server_path` can explicitly select another standalone server.
+
+## Project scope
+
+Discovery matches `maa-support-extension`: all workspace folders are scanned recursively for interface files while hidden directories, `node_modules`, `MaaUtils`, and `MaaDeps` are skipped. This plugin implements generic MaaFramework behavior only and deliberately excludes MaaAssistantArknights-specific layouts and expression semantics.
+
+---
+
+## 中文说明
+
 Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 包拉起内置的 maa-lsp，为 MaaFramework pipeline / interface JSON 提供诊断、定义跳转和悬停预览。
 
 ## 前置条件

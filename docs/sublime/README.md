@@ -6,6 +6,8 @@
 
 `pnpm package:sublime` 生成 `release/LSP-MaaFramework.sublime-package`。它是 ZIP 格式，包含：
 
+- 英文优先、保留完整中文章节的公开 `README.md`，方便 Package Control 国际用户和中文用户使用同一份说明；
+
 - `.python-version`，固定为 `3.8`，确保插件与新版 LSP 运行在相同的 Sublime Python 宿主；
 - `plugin.py`
 - `LSP-MaaFramework.sublime-settings`

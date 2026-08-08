@@ -1,5 +1,47 @@
 # maa-support-sublime (mss)
 
+`LSP-MaaFramework` is a Sublime Text 4 LSP helper for developing MaaFramework pipeline and interface projects. It bundles a standalone language server and adds project selection, native runtime control, recognition tools, and log analysis to Sublime Text.
+
+[中文说明](#中文说明)
+
+## Features
+
+- Diagnostics, completion, navigation, references, rename, formatting, symbols, Code Lens, Inlay Hints, Code Actions, document links/colors, and rich hover information for MaaFramework JSON/JSONC;
+- recursive discovery of every interface project in multi-root workspaces, including unsaved editor buffers and hot reloads of `maatools.config.mts` and `maa_pi_config.json`;
+- controller, resource, locale, project, and task selection, task evaluation, environment checks, and manual reloads;
+- MaaFramework native task queues, runtime controls, breakpoints, Agents, version/registry management, runtime details, and optional global shortcuts;
+- screenshot/cropping, OCR/template/pipeline recognition tests, built-in log analysis, and MaaLogAnalyzer integration;
+- a self-contained `LSP-MaaFramework.sublime-package` that does not depend on this repository's `node_modules`.
+
+Project discovery follows `maa-support-extension`: it recursively finds `interface.json` and `interface.jsonc` while skipping hidden directories, `node_modules`, `MaaUtils`, and `MaaDeps`. This plugin supports generic MaaFramework projects only; it does not implement MaaAssistantArknights-specific layouts, references, or expression evaluation.
+
+## Installation and usage
+
+See the [Sublime package guide](pkgs/sublime/README.md) for prerequisites, installation, configuration, and command usage.
+
+## Development
+
+```bash
+pnpm install
+uv sync --frozen
+pnpm lint
+pnpm test
+pnpm package:sublime
+```
+
+Python development tools are managed by uv. The root `.python-version` selects Python 3.13, while the packaged Sublime plugin has its own `.python-version` selecting the editor's Python 3.8 plugin host.
+
+The built package is written to `release/LSP-MaaFramework.sublime-package`.
+
+## Upstream components
+
+- LSP core: `@nekosu/maa-pipeline-manager`
+- Reference implementation: `maa-support-extension`
+
+---
+
+## 中文说明
+
 Sublime Text 插件 + maa-lsp，面向 MaaFramework pipeline 开发。
 
 > ⚠️ 本文档由 AI 生成，主要用于辅助 AI 理解项目。内容可能与实际代码不同步，请注意甄别。
