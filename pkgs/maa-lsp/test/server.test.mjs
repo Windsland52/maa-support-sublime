@@ -115,6 +115,29 @@ function positionAtOffset(content, offset) {
   return { line: before.length - 1, character: before.at(-1).length }
 }
 
+function offsetAtPosition(content, position) {
+  const lines = content.split('\n')
+  let offset = 0
+  for (let line = 0; line < position.line; line++) {
+    offset += lines[line].length + 1
+  }
+  return offset + position.character
+}
+
+function applyTextEdits(content, edits) {
+  const ordered = [...edits].sort(
+    (left, right) =>
+      offsetAtPosition(content, right.range.start) - offsetAtPosition(content, left.range.start)
+  )
+  let result = content
+  for (const edit of ordered) {
+    const start = offsetAtPosition(content, edit.range.start)
+    const end = offsetAtPosition(content, edit.range.end)
+    result = result.slice(0, start) + edit.newText + result.slice(end)
+  }
+  return result
+}
+
 test('standalone server discovers recursive projects in every workspace', async () => {
   const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-'))
   let client
@@ -152,6 +175,7 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.deepEqual(initialized.result.capabilities.documentLinkProvider, {
       resolveProvider: false
     })
+    assert.equal(initialized.result.capabilities.documentFormattingProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
     assert.equal(initialized.result.capabilities.inlayHintProvider, true)
     assert.equal(initialized.result.capabilities.referencesProvider, true)
@@ -961,6 +985,70 @@ test('provides RGB and HSV document colors with presentations', async () => {
       ['[0,255,0]']
     )
     assert.deepEqual(presentation.result[0].textEdit.range, colors.result[0].range)
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('formats valid JSONC and leaves invalid buffers unchanged', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-format-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const pipelineFile = path.join(pipelineDir, 'tasks.jsonc')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    const source = '{// keep\n"Task":{"next":[],},\n}'
+    await writeFile(pipelineFile, source)
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+    const formatted = await client.request('textDocument/formatting', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      options: { tabSize: 2, insertSpaces: true }
+    })
+    const result = applyTextEdits(source, formatted.result)
+    assert.match(result, /^\{ \/\/ keep\n/)
+    assert.match(result, /  "Task": \{\n    "next": \[\],\n  \},\n\}/)
+
+    client.send({
+      jsonrpc: '2.0',
+      method: 'textDocument/didOpen',
+      params: {
+        textDocument: {
+          uri: pathToFileURL(pipelineFile).href,
+          languageId: 'jsonc',
+          version: 1,
+          text: '{"Task":'
+        }
+      }
+    })
+    const invalid = await client.request('textDocument/formatting', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      options: { tabSize: 2, insertSpaces: true }
+    })
+    assert.deepEqual(invalid.result, [])
 
     await client.shutdown()
     client = undefined

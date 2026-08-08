@@ -1,3 +1,4 @@
+import { format as formatJsonc, parseTree } from 'jsonc-parser'
 import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { TextDocument } from 'vscode-languageserver-textdocument'
@@ -1039,6 +1040,7 @@ connection.onInitialize(params => {
       colorProvider: true,
       definitionProvider: true,
       documentLinkProvider: { resolveProvider: false },
+      documentFormattingProvider: true,
       hoverProvider: true,
       inlayHintProvider: true,
       referencesProvider: true,
@@ -1519,6 +1521,42 @@ connection.onColorPresentation(async params => {
         )
   const label = JSON.stringify(values)
   return [{ label, textEdit: TextEdit.replace(params.range, label) }]
+})
+
+connection.onDocumentFormatting(async params => {
+  resolver.reset()
+  const file = URI.parse(params.textDocument.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    if (!project.bundle.locateLayer(file)) {
+      continue
+    }
+    const content = await loader.get(file)
+    if (content === null) {
+      return []
+    }
+    const errors: { error: number; length: number; offset: number }[] = []
+    parseTree(content, errors, { allowTrailingComma: true, disallowComments: false })
+    if (errors.length > 0) {
+      return []
+    }
+    const edits = formatJsonc(content, undefined, {
+      tabSize: params.options.tabSize,
+      insertSpaces: params.options.insertSpaces,
+      eol: content.includes('\r\n') ? '\r\n' : '\n'
+    })
+    return Promise.all(
+      edits.map(async edit => {
+        const [startLine, startCharacter] = await resolver.resolve(file, edit.offset)
+        const [endLine, endCharacter] = await resolver.resolve(file, edit.offset + edit.length)
+        return TextEdit.replace(
+          Range.create(startLine, startCharacter, endLine, endCharacter),
+          edit.content
+        )
+      })
+    )
+  }
+  return null
 })
 
 connection.onDefinition(async params => {
