@@ -45,8 +45,9 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 ## 能力
 
 - Diagnostics
+- Completion（任务、锚点、图片、locale 与 interface 引用）
 - Definition
 - Hover
 - Multi-root workspace
 
-当前未实现 completion、code action、formatting、code lens 和资源选择 UI。
+当前未实现 code action、formatting、code lens 和资源选择 UI。

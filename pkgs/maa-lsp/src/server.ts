@@ -2,6 +2,8 @@ import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { TextDocument } from 'vscode-languageserver-textdocument'
 import {
+  type CompletionItem,
+  CompletionItemKind,
   type Definition,
   DiagnosticSeverity,
   FileChangeType,
@@ -15,6 +17,7 @@ import {
   ShowMessageNotification,
   TextDocumentSyncKind,
   TextDocuments,
+  TextEdit,
   createConnection
 } from 'vscode-languageserver/node.js'
 import { URI } from 'vscode-uri'
@@ -517,12 +520,212 @@ async function locateAndResolve(
   return null
 }
 
+type CompletionSpec = {
+  kind: 'task' | 'anchor' | 'image' | 'locale'
+  startDelta: number
+  prefixes?: string[]
+  colorMatchOnly?: boolean
+}
+
+function completionSpec(ref: TaskRefInfo): CompletionSpec | null {
+  switch (ref.type) {
+    case 'task.next':
+      if (ref.objMode) {
+        return { kind: ref.attrs.attrs.Anchor ? 'anchor' : 'task', startDelta: 1 }
+      }
+      if (ref.attrs.attrs.Anchor) {
+        return { kind: 'anchor', startDelta: 1 + ref.attrs.offset }
+      }
+      return {
+        kind: 'task',
+        startDelta: 1 + ref.attrs.offset,
+        prefixes: ref.attrs.attrs.JumpBack ? ['[Anchor]'] : ['[JumpBack]', '[Anchor]']
+      }
+    case 'task.target':
+    case 'task.roi':
+      return {
+        kind: ref.attrs.attrs.Anchor ? 'anchor' : 'task',
+        startDelta: 1 + ref.attrs.offset,
+        prefixes: ref.attrs.attrs.Anchor ? [] : ['[Anchor]']
+      }
+    case 'task.anchor':
+    case 'task.reco':
+    case 'task.custom_task':
+    case 'task.entry':
+      return { kind: 'task', startDelta: 1 }
+    case 'task.color_filter':
+      return { kind: 'task', startDelta: 1, colorMatchOnly: true }
+    case 'task.custom_anchor':
+      return { kind: 'anchor', startDelta: 1 }
+    case 'task.template':
+    case 'task.custom_template':
+      return { kind: 'image', startDelta: 1 }
+    case 'task.locale':
+      return { kind: 'locale', startDelta: 2 }
+    default:
+      return null
+  }
+}
+
+async function completionEditRange(
+  file: string,
+  offset: number,
+  length: number,
+  startDelta: number
+): Promise<Range> {
+  const [startLine, startCharacter] = await resolver.resolve(file, offset + startDelta)
+  const [endLine, endCharacter] = await resolver.resolve(file, offset + length - 1)
+  return Range.create(startLine, startCharacter, endLine, endCharacter)
+}
+
+function escapedStringContent(value: string): string {
+  const escaped = JSON.stringify(value)
+  return escaped.slice(1, -1)
+}
+
+async function completeInterface(
+  project: ProjectBundle,
+  file: string,
+  offset: number
+): Promise<CompletionItem[] | null> {
+  const index = project.bundle.info
+  const ref = findDeclRef(
+    index.refs.filter(candidate => candidate.file === file),
+    offset
+  )
+  if (!ref) {
+    return null
+  }
+
+  let names: string[] | null = null
+  if (
+    ref.type === 'interface.controller' ||
+    ref.type === 'interface.resource' ||
+    ref.type === 'interface.group' ||
+    ref.type === 'interface.task' ||
+    ref.type === 'interface.option'
+  ) {
+    names = index.decls.filter(decl => decl.type === ref.type).map(decl => decl.name as string)
+  } else if (ref.type === 'interface.case' || ref.type === 'interface.input') {
+    if (ref.type === 'interface.input' && ref.offset !== undefined) {
+      return null
+    }
+    names = index.decls
+      .filter(decl => decl.type === ref.type && decl.option === ref.option)
+      .map(decl => decl.name)
+  }
+  if (!names) {
+    return null
+  }
+
+  const range = await completionEditRange(file, ref.location.offset, ref.location.length, 1)
+  return [...new Set(names)].map(name => ({
+    label: name,
+    kind: CompletionItemKind.Reference,
+    textEdit: TextEdit.replace(range, escapedStringContent(name))
+  }))
+}
+
+async function completePipeline(
+  project: ProjectBundle,
+  file: string,
+  offset: number
+): Promise<CompletionItem[] | null> {
+  const layerInfo = project.bundle.locateLayer(file as AbsolutePath)
+  if (!layerInfo) {
+    return null
+  }
+  const [layer, fileName] = layerInfo
+  const ref = findDeclRef(
+    layer.mergedRefs.filter(candidate => candidate.file === fileName),
+    offset
+  )
+  if (!ref) {
+    return null
+  }
+  const spec = completionSpec(ref)
+  if (!spec) {
+    return null
+  }
+  const range = await completionEditRange(
+    file,
+    ref.location.offset,
+    ref.location.length,
+    spec.startDelta
+  )
+  const items: CompletionItem[] = []
+  for (const prefix of spec.prefixes ?? []) {
+    items.push({
+      label: prefix,
+      kind: CompletionItemKind.Property,
+      sortText: prefix === '[JumpBack]' ? '0_JumpBack' : '2_Anchor',
+      textEdit: TextEdit.insert(range.start, prefix)
+    })
+  }
+
+  if (spec.kind === 'task') {
+    for (const task of layer.getTaskList()) {
+      const brief = layer.getTaskBriefInfo(task)
+      if (spec.colorMatchOnly && brief.reco !== 'ColorMatch') {
+        continue
+      }
+      const doc = project.bundle.topLayer.getTaskDoc(task)
+      items.push({
+        label: task,
+        kind: CompletionItemKind.Class,
+        sortText: `1_${task}`,
+        detail: [doc, brief.reco && `Reco: ${brief.reco}`, brief.act && `Act: ${brief.act}`]
+          .filter(Boolean)
+          .join('\n'),
+        textEdit: TextEdit.replace(range, escapedStringContent(task))
+      })
+    }
+  } else if (spec.kind === 'anchor') {
+    for (const anchor of new Set(layer.getAnchorList().map(([name]) => name))) {
+      items.push({
+        label: anchor,
+        kind: CompletionItemKind.Variable,
+        textEdit: TextEdit.replace(range, escapedStringContent(anchor))
+      })
+    }
+  } else if (spec.kind === 'image') {
+    for (const [folder] of layer.getImageFolders()) {
+      items.push({
+        label: `${folder}/`,
+        kind: CompletionItemKind.Folder,
+        sortText: `0_${folder}/`,
+        textEdit: TextEdit.replace(range, escapedStringContent(`${folder}/`))
+      })
+    }
+    for (const image of layer.getImageList()) {
+      items.push({
+        label: image,
+        kind: CompletionItemKind.File,
+        sortText: `1_${image}`,
+        textEdit: TextEdit.replace(range, escapedStringContent(image))
+      })
+    }
+  } else {
+    for (const key of project.bundle.langBundle.allKeys()) {
+      items.push({
+        label: key,
+        kind: CompletionItemKind.Constant,
+        textEdit: TextEdit.replace(range, escapedStringContent(key))
+      })
+    }
+  }
+  return items
+}
+
 connection.onInitialize(params => {
   workspaceRoots = workspaceRootsFromInitialize(params)
   clientSupportsWorkspaceFolders = params.capabilities.workspace?.workspaceFolders === true
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
+      completionProvider: {
+        triggerCharacters: ['"', '[', ']', '$', '@', '#', '+', '^', '(']
+      },
       definitionProvider: true,
       hoverProvider: true,
       workspace: {
@@ -563,6 +766,21 @@ connection.onDidChangeWatchedFiles(params => {
   ) {
     queueWorkspaceRefresh()
   }
+})
+
+connection.onCompletion(async params => {
+  const ctx = await locateAndResolve(
+    params.textDocument.uri,
+    params.position.line,
+    params.position.character
+  )
+  if (!ctx) {
+    return null
+  }
+  return (
+    (await completeInterface(ctx.project, ctx.file, ctx.offset)) ??
+    (await completePipeline(ctx.project, ctx.file, ctx.offset))
+  )
 })
 
 connection.onDefinition(async params => {

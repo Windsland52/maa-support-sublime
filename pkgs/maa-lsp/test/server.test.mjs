@@ -110,6 +110,11 @@ async function addInterface(root, relative) {
   await writeFile(path.join(dir, 'interface.json'), '{}')
 }
 
+function positionAtOffset(content, offset) {
+  const before = content.slice(0, offset).split('\n')
+  return { line: before.length - 1, character: before.at(-1).length }
+}
+
 test('standalone server discovers recursive projects in every workspace', async () => {
   const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-'))
   let client
@@ -137,6 +142,17 @@ test('standalone server discovers recursive projects in every workspace', async 
       }))
     })
     assert.equal(initialized.result.capabilities.textDocumentSync, 2)
+    assert.deepEqual(initialized.result.capabilities.completionProvider.triggerCharacters, [
+      '"',
+      '[',
+      ']',
+      '$',
+      '@',
+      '#',
+      '+',
+      '^',
+      '('
+    ])
     assert.equal(initialized.result.capabilities.definitionProvider, true)
     assert.equal(initialized.result.capabilities.hoverProvider, true)
 
@@ -582,6 +598,88 @@ test('reports maatools.config.mts load failures without stopping the project', a
         message.method === 'window/logMessage' &&
         message.params.message === 'maa-lsp: loaded 1 interface project'
     )
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})
+
+test('completes pipeline tasks and interface references', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-completion-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    const pipelineFile = path.join(pipelineDir, 'tasks.json')
+    const interfaceFile = path.join(workspace, 'interface.json')
+    await mkdir(pipelineDir, { recursive: true })
+    const interfaceText = JSON.stringify(
+      {
+        controller: [{ name: 'Adb' }, { name: 'Win32' }],
+        resource: [
+          {
+            name: 'Default',
+            path: 'resource',
+            controller: ['PartialController']
+          }
+        ]
+      },
+      null,
+      2
+    )
+    const pipelineText = JSON.stringify(
+      {
+        ExistingTask: {},
+        Entry: { next: ['PartialTask'] }
+      },
+      null,
+      2
+    )
+    await writeFile(interfaceFile, interfaceText)
+    await writeFile(pipelineFile, pipelineText)
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    await client.waitFor(
+      message =>
+        message.method === 'window/logMessage' &&
+        message.params.message === 'maa-lsp: loaded 1 interface project'
+    )
+
+    const pipelineCompletion = await client.request('textDocument/completion', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: positionAtOffset(
+        pipelineText,
+        pipelineText.indexOf('PartialTask') + 'PartialTask'.length
+      )
+    })
+    assert.deepEqual(
+      pipelineCompletion.result
+        .filter(item => item.kind === 7)
+        .map(item => item.label)
+        .sort(),
+      ['Entry', 'ExistingTask']
+    )
+
+    const interfaceCompletion = await client.request('textDocument/completion', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href },
+      position: positionAtOffset(
+        interfaceText,
+        interfaceText.indexOf('PartialController') + 'PartialController'.length
+      )
+    })
+    assert.deepEqual(interfaceCompletion.result.map(item => item.label).sort(), ['Adb', 'Win32'])
 
     await client.shutdown()
     client = undefined

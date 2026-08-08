@@ -37,7 +37,7 @@
 
 ## 语言服务
 
-- [ ] Completion
+- [x] Completion
 - [ ] References
 - [ ] Workspace Symbol
 - [ ] Code Lens
