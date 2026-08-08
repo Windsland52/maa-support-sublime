@@ -30,6 +30,7 @@ import {
   type AbsolutePath,
   type AnchorName,
   type IContentWatcherController,
+  type ImageRelativePath,
   InterfaceBundle,
   type InterfaceDeclInfo,
   type InterfaceInfo,
@@ -674,6 +675,75 @@ ${JSON.stringify(final, null, 2)}
 `)
   }
   return parts.join('\n\n')
+}
+
+function getImageHover(project: ProjectBundle, image: ImageRelativePath): string {
+  const layer = project.bundle.topLayer
+  const parts: string[] = []
+  if (!image.endsWith('.png')) {
+    const normalized = normalizeImageFolder(image)
+    for (const imageLayer of layer.getImageFolders().get(normalized) ?? []) {
+      const count = [...imageLayer.images.keys()].filter(candidate =>
+        candidate.startsWith(`${normalized}/`)
+      ).length
+      parts.push(
+        `${path.relative(project.root.workspaceRoot, imageLayer.root) || '.'} — ${count} images`
+      )
+    }
+  } else {
+    for (const [imageLayer, full, file] of layer.getImage(image)) {
+      const uri = URI.file(full).toString()
+      parts.push(
+        `${path.relative(project.root.workspaceRoot, imageLayer.root) || '.'} — [${file}](${uri})\n\n![](${uri})`
+      )
+    }
+  }
+  return parts.join('\n\n')
+}
+
+async function getLocaleHover(project: ProjectBundle, key: string): Promise<string> {
+  const languages = project.bundle.langBundle.langs
+  if (languages.length === 0) {
+    return ''
+  }
+  const rows: string[] = []
+  for (const [index, entry] of project.bundle.langBundle.queryKey(key).entries()) {
+    const language = languages[index]
+    if (!language) {
+      continue
+    }
+    if (!entry) {
+      rows.push(`| ${language.name} | <missing> |`)
+      continue
+    }
+    const full = path.join(project.bundle.root, language.file)
+    const [line] = await resolver.resolve(full, entry.keyNode.offset)
+    const value = entry.value.replaceAll('|', '\\|').replaceAll('\n', '<br>')
+    rows.push(`| [${language.name}](${URI.file(full).toString()}#L${line + 1}) | ${value} |`)
+  }
+  return rows.length > 0 ? `| locale | value |\n| --- | --- |\n${rows.join('\n')}` : ''
+}
+
+function getInterfaceHover(decl: InterfaceDeclInfo | null, ref: InterfaceRefInfo | null): string {
+  const entry = decl ?? ref
+  if (!entry) {
+    return ''
+  }
+  const name = 'name' in entry ? entry.name : 'target' in entry ? entry.target : ''
+  const details: string[] = [`**${entry.type}**${name ? ` \`${name}\`` : ''}`]
+  if ('paths' in entry && entry.paths.length > 0) {
+    details.push(`Paths: ${entry.paths.map(value => `\`${value}\``).join(', ')}`)
+  }
+  if ('attachs' in entry && entry.attachs.length > 0) {
+    details.push(`Attached paths: ${entry.attachs.map(value => `\`${value}\``).join(', ')}`)
+  }
+  if ('path' in entry && typeof entry.path === 'string') {
+    details.push(`Path: \`${entry.path}\``)
+  }
+  if ('option' in entry && typeof entry.option === 'string') {
+    details.push(`Option: \`${entry.option}\``)
+  }
+  return details.join('\n\n')
 }
 
 async function locateAndResolve(
@@ -1496,6 +1566,18 @@ connection.onHover(async params => {
     return null
   }
   const bundle = ctx.project.bundle
+  const interfaceDecl = findDeclRef(
+    bundle.info.decls.filter(candidate => candidate.file === ctx.file),
+    ctx.offset
+  )
+  const interfaceRef = findDeclRef(
+    bundle.info.refs.filter(candidate => candidate.file === ctx.file),
+    ctx.offset
+  )
+  const interfaceContent = getInterfaceHover(interfaceDecl, interfaceRef)
+  if (interfaceContent) {
+    return { contents: { kind: MarkupKind.Markdown, value: interfaceContent } }
+  }
   const layerInfo = bundle.locateLayer(ctx.file as AbsolutePath)
   if (!layerInfo) {
     return null
@@ -1512,9 +1594,54 @@ connection.onHover(async params => {
         return null
       }
       task = decl.task
+    } else if (decl.type === 'task.locale') {
+      const content = await getLocaleHover(ctx.project, decl.key)
+      return content ? { contents: { kind: MarkupKind.Markdown, value: content } } : null
+    } else if (decl.type === 'task.anchor') {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: `**Anchor** \`${decl.anchor}\`\n\nTask: \`${decl.belong}\``
+        }
+      }
+    } else if (decl.type === 'task.sub_reco') {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: `**Sub-recognition** \`${decl.name}\`\n\nTask: \`${decl.task}\``
+        }
+      }
+    } else if (decl.type === 'task.doc') {
+      return { contents: { kind: MarkupKind.Markdown, value: decl.doc } }
     }
   } else if (ref) {
     task = extractTaskRef(ref)
+    if (!task && (ref.type === 'task.template' || ref.type === 'task.custom_template')) {
+      const content = getImageHover(ctx.project, ref.target)
+      return content ? { contents: { kind: MarkupKind.Markdown, value: content } } : null
+    }
+    if (!task && ref.type === 'task.locale') {
+      const content = await getLocaleHover(ctx.project, ref.target)
+      return content ? { contents: { kind: MarkupKind.Markdown, value: content } } : null
+    }
+    if (!task && isAnchorRef(ref)) {
+      return {
+        contents: { kind: MarkupKind.Markdown, value: `**Anchor reference** \`${ref.target}\`` }
+      }
+    }
+    if (!task && ref.type === 'task.color') {
+      return {
+        contents: {
+          kind: MarkupKind.Markdown,
+          value: `**${ref.method.toUpperCase()} color** \`${JSON.stringify(ref.color)}\``
+        }
+      }
+    }
+    if (!task && ref.type === 'task.can_locale') {
+      return {
+        contents: { kind: MarkupKind.Markdown, value: `Localizable text: ${ref.target}` }
+      }
+    }
   }
   if (!task) {
     return null

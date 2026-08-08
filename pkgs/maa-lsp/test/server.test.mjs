@@ -648,6 +648,12 @@ test('completes pipeline tasks and interface references', async () => {
       position: positionAtOffset(interfaceText, interfaceText.lastIndexOf('Adb') + 'Adb'.length)
     })
     assert.deepEqual(interfaceCompletion.result.map(item => item.label).sort(), ['Adb', 'Win32'])
+    const interfaceHover = await client.request('textDocument/hover', {
+      textDocument: { uri: pathToFileURL(interfaceFile).href },
+      position: positionAtOffset(interfaceText, interfaceText.indexOf('Adb') + 1)
+    })
+    assert.match(interfaceHover.result.contents.value, /interface\.controller/)
+    assert.match(interfaceHover.result.contents.value, /Adb/)
 
     const pipelineReferences = await client.request('textDocument/references', {
       textDocument: { uri: pathToFileURL(pipelineFile).href },
@@ -796,6 +802,12 @@ test('provides task documentation and locale inlay hints', async () => {
       }
     })
     assert.deepEqual(hints.result.map(hint => hint.label).sort(), ['Hello', 'Helpful task'])
+    const localeHover = await client.request('textDocument/hover', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: positionAtOffset(pipelineText, pipelineText.indexOf('greeting') + 1)
+    })
+    assert.match(localeHover.result.contents.value, /English/)
+    assert.match(localeHover.result.contents.value, /Hello/)
 
     await client.shutdown()
     client = undefined
@@ -824,21 +836,19 @@ test('links interface resource paths and pipeline template images', async () => 
       interfaceFile,
       JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] }, null, 2)
     )
-    await writeFile(
-      pipelineFile,
-      JSON.stringify(
-        {
-          ImageTask: {
-            recognition: {
-              type: 'TemplateMatch',
-              param: { template: 'folder/image.png' }
-            }
+    const pipelineText = JSON.stringify(
+      {
+        ImageTask: {
+          recognition: {
+            type: 'TemplateMatch',
+            param: { template: 'folder/image.png' }
           }
-        },
-        null,
-        2
-      )
+        }
+      },
+      null,
+      2
     )
+    await writeFile(pipelineFile, pipelineText)
     await writeFile(imageFile, '')
 
     client = new LspClient(server, temp)
@@ -869,6 +879,12 @@ test('links interface resource paths and pipeline template images', async () => 
       pipelineLinks.result.map(link => path.normalize(fileURLToPath(link.target)).toLowerCase()),
       [path.normalize(imageFile).toLowerCase()]
     )
+    const imageHover = await client.request('textDocument/hover', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      position: positionAtOffset(pipelineText, pipelineText.indexOf('folder/image.png') + 1)
+    })
+    assert.match(imageHover.result.contents.value, /image\.png/)
+    assert.match(imageHover.result.contents.value, /!\[\]/)
 
     await client.shutdown()
     client = undefined
