@@ -73,3 +73,5 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 pause 在 tasker sink 上施加异步闸门并阻止下一队列项开始；continue 释放闸门；stop 同时释放暂停等待并调用 `Tasker.post_stop()`。worker 与 LSP 分进程，native module 异常退出不会终止语言服务。
 
 worker 保留最近 500 条 controller/resource/tasker/task/state event。`status` 返回当前状态、当前任务、队列与该有界历史；`recognitionDetail`、`actionDetail` 和 `nodeDetail` 分别读取 native Tasker/Resource 的识别、动作和 pipeline node 详情。识别原图与 draws 转换为 PNG data URL 后跨进程返回。
+
+`start.breakTasks` 和运行时 `setBreakpoints` 设置 pipeline node 名称集合。当 Tasker 的 `*.Starting` 通知命中断点时，worker 先发布 `breakpoint` 与带 `reason: breakpoint` 的 paused state，再在 sink 异步闸门等待 continue/stop。这组逐行 JSON 请求、响应和 event 构成本插件的轻量调试协议。

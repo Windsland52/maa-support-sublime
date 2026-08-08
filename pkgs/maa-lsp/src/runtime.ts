@@ -37,6 +37,7 @@ let resume: (() => void) | null = null
 let stopped = false
 let runtimeStatus = 'idle'
 let currentTask: string | null = null
+let breakTasks = new Set<string>()
 const history: Array<{ event: string; params: unknown }> = []
 
 function send(message: unknown) {
@@ -66,6 +67,21 @@ async function waitWhilePaused() {
 
 async function pushNotify(message: unknown) {
   notify('tasker', message)
+  if (
+    typeof message === 'object' &&
+    message !== null &&
+    'name' in message &&
+    typeof message.name === 'string' &&
+    'msg' in message &&
+    typeof message.msg === 'string' &&
+    message.msg.endsWith('.Starting') &&
+    breakTasks.has(message.name)
+  ) {
+    paused = true
+    runtimeStatus = 'paused'
+    notify('breakpoint', { task: message.name, message: message.msg })
+    notify('state', { status: runtimeStatus, reason: 'breakpoint', task: message.name })
+  }
   await waitWhilePaused()
 }
 
@@ -182,6 +198,11 @@ async function setup(params: Record<string, unknown>) {
   }
   session = { controller, resource, tasker, tasks: taskRuntime.tasks }
   history.length = 0
+  breakTasks = new Set(
+    Array.isArray(params.breakTasks)
+      ? params.breakTasks.filter((task): task is string => typeof task === 'string')
+      : []
+  )
   paused = false
   stopped = false
   runtimeStatus = 'ready'
@@ -313,6 +334,13 @@ async function handle(request: Request): Promise<unknown> {
       return session && typeof request.params?.task === 'string'
         ? ((session.resource as any).get_node_data(request.params.task) ?? null)
         : null
+    case 'setBreakpoints':
+      breakTasks = new Set(
+        Array.isArray(request.params?.tasks)
+          ? request.params.tasks.filter((task): task is string => typeof task === 'string')
+          : []
+      )
+      return [...breakTasks]
     case 'shutdown':
       await destroySession()
       return true

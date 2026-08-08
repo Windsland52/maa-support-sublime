@@ -40,6 +40,10 @@
     "command": "maa_framework_runtime_detail"
   },
   {
+    "caption": "MaaFramework: Manage Task Breakpoints",
+    "command": "maa_framework_breakpoints"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

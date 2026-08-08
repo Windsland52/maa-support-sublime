@@ -104,6 +104,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `Show Runtime Status` 展示有界实时事件历史；`Show Latest Recognition / Action Detail` 从 native Tasker 读取最近一次识别或动作的完整元数据。
 
+`Manage Task Breakpoints` 按项目持久化 pipeline node 断点；worker 在命中的 `*.Starting` 通知处暂停，使用 Continue 或 Stop 解除。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

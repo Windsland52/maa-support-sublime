@@ -6,5 +6,6 @@
   "maa_version": "5.12.2",
   "npm_registry": "https://registry.npmjs.org",
   "debug_mode": true,
-  "save_draw": false
+  "save_draw": false,
+  "break_tasks": {}
 }

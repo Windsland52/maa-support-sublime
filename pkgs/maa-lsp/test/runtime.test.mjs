@@ -93,8 +93,12 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
       path.join(nativePackage, 'dist', 'index-client.js'),
       `
       class Operation {
-        constructor(succeeded = true) { this.succeeded = succeeded }
-        async wait() { await new Promise(resolve => setTimeout(resolve, 10)); return this }
+        constructor(succeeded = true, before = null) { this.succeeded = succeeded; this.before = before }
+        async wait() {
+          await this.before
+          await new Promise(resolve => setTimeout(resolve, 10))
+          return this
+        }
       }
       class Controller {
         constructor() { this.connected = true }
@@ -112,8 +116,8 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         add_sink(sink) { this.sink = sink }
         add_context_sink(sink) { this.contextSink = sink }
         post_task(entry) {
-          this.sink?.(0, { msg: 'RecognitionNode.Succeeded', name: entry, reco_id: 7 })
-          return new Operation()
+          const gate = this.sink?.(0, { msg: 'RecognitionNode.Starting', name: entry, reco_id: 7 })
+          return new Operation(true, gate)
         }
         recognition_detail(id) {
           return { id, name: 'Entry', raw: new Uint8Array([1, 2]), draws: [new Uint8Array([3])] }
@@ -164,13 +168,17 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
       project,
       logDir: path.join(project, 'debug'),
       debugMode: true,
-      saveDraw: false
+      saveDraw: false,
+      breakTasks: ['Done']
     })
     assert.equal(started.error, undefined)
     assert.deepEqual(started.result.tasks, ['First', 'Second'])
     assert.equal(started.result.version, '5.12.2')
 
-    assert.equal((await client.request('pause')).result, true)
+    const breakpoint = await client.waitFor(message => message.event === 'breakpoint')
+    assert.equal(breakpoint.params.task, 'Done')
+    const paused = await client.request('status')
+    assert.equal(paused.result.status, 'paused')
     assert.equal((await client.request('continue')).result, true)
     const finished = await client.waitFor(
       message => message.event === 'state' && message.params.status === 'finished'
@@ -184,6 +192,9 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
     assert.equal(detail.result.info.name, 'Entry')
     assert.equal(detail.result.raw, 'data:image/png;base64,AQI=')
     assert.deepEqual(detail.result.draws, ['data:image/png;base64,Aw=='])
+    assert.deepEqual((await client.request('setBreakpoints', { tasks: ['Entry'] })).result, [
+      'Entry'
+    ])
     assert.equal((await client.request('stop')).result, true)
     assert.equal((await client.shutdown()).result, true)
     client = undefined

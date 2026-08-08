@@ -64,6 +64,7 @@ class MaaRuntimeManager:
                     "debugMode": settings.get("debug_mode", True),
                     "saveDraw": settings.get("save_draw", False),
                     "logDir": str(log_dir),
+                    "breakTasks": _break_tasks(project),
                 },
                 self._started,
             )
@@ -137,6 +138,10 @@ class MaaRuntimeManager:
             )
 
         self.request(method, {"id": detail_id}, show)
+
+    def set_breakpoints(self, tasks: list[str]) -> None:
+        if self.process and self.process.poll() is None:
+            self.request("setBreakpoints", {"tasks": tasks}, lambda _result: None)
 
     def request(self, method: str, params: dict[str, Any], callback) -> None:
         process = self.process
@@ -433,6 +438,23 @@ def _project_interface(project: Path) -> dict[str, Any]:
 def _project_config(project: Path) -> Optional[dict[str, Any]]:
     config_file = project / "config" / "maa_pi_config.json"
     return _load_json_object(config_file) if config_file.is_file() else {}
+
+
+def _break_tasks(project: Path) -> list[str]:
+    value = sublime.load_settings(SETTINGS_FILE).get("break_tasks", {})
+    if not isinstance(value, dict):
+        return []
+    tasks = value.get(str(project.resolve()))
+    return [task for task in tasks if isinstance(task, str)] if isinstance(tasks, list) else []
+
+
+def _save_break_tasks(project: Path, tasks: list[str]) -> None:
+    settings = sublime.load_settings(SETTINGS_FILE)
+    value = settings.get("break_tasks", {})
+    mapping = dict(value) if isinstance(value, dict) else {}
+    mapping[str(project.resolve())] = tasks
+    settings.set("break_tasks", mapping)
+    sublime.save_settings(SETTINGS_FILE)
 
 
 def _write_project_config(project: Path, config: dict[str, Any]) -> Optional[str]:
@@ -803,6 +825,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Stop Runtime",
             "Show Runtime Status…",
             "Show Latest Recognition / Action Detail…",
+            "Manage Task Breakpoints…",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -819,6 +842,7 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_stop",
             "maa_framework_runtime_status",
             "maa_framework_runtime_detail",
+            "maa_framework_breakpoints",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -874,6 +898,41 @@ class MaaFrameworkRuntimeStatusCommand(sublime_plugin.WindowCommand):
 class MaaFrameworkRuntimeDetailCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
         _runtime_manager.show_latest_detail(self.window)
+
+
+class MaaFrameworkBreakpointsCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        self._project = _active_project(self.window)
+        if self._project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        self._tasks = [name for name, _, _ in _project_tasks(self._project)]
+        if not self._tasks:
+            sublime.status_message("MaaFramework: no pipeline tasks found")
+            return
+        active = set(_break_tasks(self._project))
+        self.window.show_quick_panel(
+            [f"{'●' if task in active else '○'} {task}" for task in self._tasks],
+            self._on_done,
+        )
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._tasks):
+            return
+        task = self._tasks[index]
+        active = set(_break_tasks(self._project))
+        if task in active:
+            active.remove(task)
+            enabled = False
+        else:
+            active.add(task)
+            enabled = True
+        tasks = sorted(active, key=str.casefold)
+        _save_break_tasks(self._project, tasks)
+        _runtime_manager.set_breakpoints(tasks)
+        sublime.status_message(
+            f"MaaFramework: {'enabled' if enabled else 'disabled'} breakpoint {task}"
+        )
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):

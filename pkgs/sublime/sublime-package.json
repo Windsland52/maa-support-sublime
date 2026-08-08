@@ -32,6 +32,15 @@
                   "type": "boolean",
                   "default": false,
                   "markdownDescription": "Ask MaaFramework to save recognition drawing output in the project debug directory."
+                },
+                "break_tasks": {
+                  "type": "object",
+                  "default": {},
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "markdownDescription": "Per-project pipeline task breakpoints managed by the control panel."
                 }
               }
             }

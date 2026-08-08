@@ -11,8 +11,11 @@ class FakeSettings:
     def __init__(self):
         self.values = {"server_path": "auto"}
 
-    def get(self, key):
-        return self.values.get(key)
+    def get(self, key, default=None):
+        return self.values.get(key, default)
+
+    def set(self, key, value):
+        self.values[key] = value
 
 
 class FakeLspPlugin:
@@ -59,6 +62,7 @@ class FakeRuntimeManager:
         self.started = None
         self.controls = []
         self.shown = []
+        self.breakpoints = []
 
     def start(self, project, window):
         self.started = (project, window)
@@ -71,6 +75,9 @@ class FakeRuntimeManager:
 
     def show_latest_detail(self, window):
         self.shown.append(("detail", window))
+
+    def set_breakpoints(self, tasks):
+        self.breakpoints.append(tasks)
 
 
 class FakeNodeRunner:
@@ -208,6 +215,9 @@ class FakeSublime(types.ModuleType):
 
     def find_resources(self, pattern):
         return ["Packages/LSP/LSP.sublime-settings"] if pattern == "LSP.sublime-settings" else []
+
+    def save_settings(self, _name):
+        pass
 
 
 class PluginTests(unittest.TestCase):
@@ -588,12 +598,13 @@ class PluginTests(unittest.TestCase):
                 "Stop Runtime",
                 "Show Runtime Status…",
                 "Show Latest Recognition / Action Detail…",
+                "Manage Task Breakpoints…",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(6)
+        window.on_done(7)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -627,6 +638,28 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(runtime.started, (project, window))
         self.assertEqual(runtime.controls, ["pause", "continue", "stop"])
         self.assertEqual(runtime.shown, [("status", window), ("detail", window)])
+
+    def test_toggles_project_task_breakpoints_and_syncs_runtime(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Alpha":{},"Beta":{}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+        runtime = FakeRuntimeManager()
+        self.plugin._runtime_manager = runtime
+
+        command = self.plugin.MaaFrameworkBreakpointsCommand(window)
+        command.run()
+        self.assertEqual(window.labels, ["○ Alpha", "○ Beta"])
+        window.on_done(1)
+
+        self.assertEqual(self.plugin._break_tasks(project), ["Beta"])
+        self.assertEqual(runtime.breakpoints, [["Beta"]])
 
 
 if __name__ == "__main__":
