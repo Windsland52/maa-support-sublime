@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const destination = path.join(root, 'release', 'LSP-MaaFramework.sublime-package')
 const serverSource = path.join(root, 'pkgs', 'maa-lsp', 'dist', 'server.mjs')
+const runtimeSource = path.join(root, 'pkgs', 'maa-lsp', 'dist', 'runtime.mjs')
 
 const files = [
   ['.python-version', path.join(root, 'pkgs', 'sublime', '.python-version')],
@@ -20,7 +21,8 @@ const files = [
   ['README.md', path.join(root, 'pkgs', 'sublime', 'README.md')],
   ['LICENSE', path.join(root, 'LICENSE')],
   ['THIRD_PARTY_NOTICES.md', path.join(root, 'pkgs', 'sublime', 'THIRD_PARTY_NOTICES.md')],
-  ['server.mjs', serverSource]
+  ['server.mjs', serverSource],
+  ['runtime.mjs', runtimeSource]
 ]
 
 const pythonVersion = (
@@ -32,12 +34,14 @@ if (pythonVersion !== '3.8') {
   )
 }
 
-const server = await readFile(serverSource, 'utf8')
-const externalImports = [...server.matchAll(/^import .*? from ["']([^"']+)["'];?$/gm)]
-  .map(match => match[1])
-  .filter(specifier => !specifier.startsWith('node:'))
-if (externalImports.length > 0) {
-  throw new Error(`server.mjs is not standalone: ${externalImports.join(', ')}`)
+for (const bundled of [serverSource, runtimeSource]) {
+  const source = await readFile(bundled, 'utf8')
+  const externalImports = [...source.matchAll(/^import .*? from ["']([^"']+)["'];?$/gm)]
+    .map(match => match[1])
+    .filter(specifier => !specifier.startsWith('node:'))
+  if (externalImports.length > 0) {
+    throw new Error(`${path.basename(bundled)} is not standalone: ${externalImports.join(', ')}`)
+  }
 }
 
 const zip = new JSZip()

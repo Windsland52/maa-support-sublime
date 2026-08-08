@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
+import threading
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -21,11 +24,204 @@ SETTINGS_FILE = "LSP-MaaFramework.sublime-settings"
 PACKAGE_NAME = "LSP-MaaFramework"
 SERVER_FILE = "server.mjs"
 SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
+RUNTIME_FILE = "runtime.mjs"
+RUNTIME_RESOURCE = f"Packages/{PACKAGE_NAME}/{RUNTIME_FILE}"
 NODE_VERSION_REQUIREMENT = ">=20.19.0"
 INTERFACE_FILES = {"interface.json", "interface.jsonc"}
 IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
 _known_maa_workspaces: set[Path] = set()
+
+
+class MaaRuntimeManager:
+    def __init__(self) -> None:
+        self.process = None
+        self.window = None
+        self.state = "idle"
+        self._callbacks = {}
+        self._next_id = 1
+        self._lock = threading.Lock()
+
+    def start(self, project: Path, window) -> None:
+        self.window = window
+        try:
+            node, module_path = self._prepare_native()
+            runtime = LspMaaFrameworkPlugin._resolve_runtime_path()
+            if runtime is None:
+                raise RuntimeError("bundled runtime.mjs not found")
+            self._ensure_process(node, runtime)
+            settings = sublime.load_settings(SETTINGS_FILE)
+            log_dir = project / "debug"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            self.request(
+                "start",
+                {
+                    "modulePath": str(module_path),
+                    "project": str(project),
+                    "debugMode": settings.get("debug_mode", True),
+                    "saveDraw": settings.get("save_draw", False),
+                    "logDir": str(log_dir),
+                },
+                self._started,
+            )
+        except Exception as error:
+            self.state = "failed"
+            sublime.status_message(f"MaaFramework: cannot start runtime: {error}")
+
+    def control(self, method: str) -> None:
+        if not self.process or self.process.poll() is not None:
+            sublime.status_message("MaaFramework: runtime is not running")
+            return
+        self.request(method, {}, lambda _result: None)
+
+    def request(self, method: str, params: dict[str, Any], callback) -> None:
+        process = self.process
+        if not process or not process.stdin or process.poll() is not None:
+            raise RuntimeError("runtime process is not running")
+        with self._lock:
+            request_id = self._next_id
+            self._next_id += 1
+            self._callbacks[request_id] = callback
+            process.stdin.write(
+                json.dumps({"id": request_id, "method": method, "params": params}) + "\n"
+            )
+            process.stdin.flush()
+
+    def shutdown(self) -> None:
+        process = self.process
+        if not process or process.poll() is not None:
+            return
+        try:
+            self.request("shutdown", {}, lambda _result: None)
+        except Exception:
+            process.terminate()
+
+    def _prepare_native(self):
+        settings = sublime.load_settings(SETTINGS_FILE)
+        version = settings.get("maa_version", "5.12.2")
+        registry = settings.get("npm_registry", "https://registry.npmjs.org")
+        if not isinstance(version, str) or not re.fullmatch(
+            r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?", version
+        ):
+            raise RuntimeError(f"invalid MaaFramework version {version!r}")
+        if not isinstance(registry, str) or not registry.startswith(("https://", "http://")):
+            raise RuntimeError(f"invalid npm registry {registry!r}")
+        node = NodeManager.resolve(PACKAGE_NAME, NODE_VERSION_REQUIREMENT)
+        install = Path(sublime.cache_path()) / PACKAGE_NAME / "native" / version
+        module_path = install / "node_modules"
+        native_entry = module_path / "@maaxyz" / "maa-node" / "dist" / "index-client.js"
+        if not native_entry.is_file():
+            install.mkdir(parents=True, exist_ok=True)
+            sublime.status_message(f"MaaFramework: installing native runtime {version}…")
+            command = [str(part) for part in node.npm_command()]
+            command.extend(
+                [
+                    "install",
+                    "--prefix",
+                    str(install),
+                    "--omit=dev",
+                    "--no-audit",
+                    "--no-fund",
+                    "--registry",
+                    registry,
+                    f"@maaxyz/maa-node@{version}",
+                ]
+            )
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env={**os.environ, **node.node_env()},
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                timeout=600,
+                check=False,
+            )
+            if completed.returncode != 0 or not native_entry.is_file():
+                detail = completed.stderr.strip() or completed.stdout.strip()
+                raise RuntimeError(f"npm install failed: {detail}")
+        return node, module_path
+
+    def _ensure_process(self, node, runtime: Path) -> None:
+        if self.process and self.process.poll() is None:
+            return
+        self.process = subprocess.Popen(
+            [str(node.node_binary_path()), str(runtime)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+            env={**os.environ, **node.node_env()},
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        )
+        threading.Thread(target=self._read_stdout, daemon=True).start()
+        threading.Thread(target=self._read_stderr, daemon=True).start()
+
+    def _read_stdout(self) -> None:
+        process = self.process
+        if not process or not process.stdout:
+            return
+        for line in process.stdout:
+            try:
+                message = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(message, dict) and isinstance(message.get("id"), int):
+                callback = self._callbacks.pop(message["id"], None)
+                if "error" in message:
+                    sublime.set_timeout(
+                        lambda error=message["error"]: self._runtime_error(error)
+                    )
+                elif callback:
+                    sublime.set_timeout(
+                        lambda result=message.get("result"), done=callback: done(result)
+                    )
+            elif isinstance(message, dict) and isinstance(message.get("event"), str):
+                sublime.set_timeout(
+                    lambda event=message["event"], params=message.get(
+                        "params"
+                    ): self._event(event, params)
+                )
+        sublime.set_timeout(self._ended)
+
+    def _read_stderr(self) -> None:
+        process = self.process
+        if not process or not process.stderr:
+            return
+        for line in process.stderr:
+            print(f"[LSP-MaaFramework runtime] {line.rstrip()}")
+
+    def _started(self, result: Any) -> None:
+        self.state = "running"
+        tasks = result.get("tasks", []) if isinstance(result, dict) else []
+        sublime.status_message(f"MaaFramework: started {len(tasks)} queued task(s)")
+
+    def _event(self, event: str, params: Any) -> None:
+        if event == "state" and isinstance(params, dict):
+            self.state = str(params.get("status", self.state))
+            sublime.status_message(f"MaaFramework: {self.state}")
+        elif event == "task" and isinstance(params, dict):
+            sublime.status_message(
+                f"MaaFramework: {params.get('name', 'task')} {params.get('status', '')}"
+            )
+
+    def _runtime_error(self, error: Any) -> None:
+        self.state = "failed"
+        sublime.status_message(f"MaaFramework runtime: {error}")
+
+    def _ended(self) -> None:
+        if self.state not in {"finished", "stopped"}:
+            self.state = "exited"
+            sublime.status_message("MaaFramework: runtime process exited")
+        self.process = None
+        self._callbacks.clear()
+
+
+_runtime_manager = MaaRuntimeManager()
 
 
 def _is_ignored_directory(name: str) -> bool:
@@ -443,7 +639,7 @@ def _show_report(window, name: str, content: str) -> None:
     output.set_read_only(True)
 
 
-class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
+class _MaaFrameworkSelector:
     config_key = ""
     interface_field = ""
     item_name = "value"
@@ -487,19 +683,19 @@ class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
         sublime.status_message(f"MaaFramework: selected {self.item_name} {value}")
 
 
-class MaaFrameworkSelectControllerCommand(_MaaFrameworkSelectCommand):
+class MaaFrameworkSelectControllerCommand(_MaaFrameworkSelector, sublime_plugin.WindowCommand):
     config_key = "controller"
     interface_field = "controller"
     item_name = "controller"
 
 
-class MaaFrameworkSelectResourceCommand(_MaaFrameworkSelectCommand):
+class MaaFrameworkSelectResourceCommand(_MaaFrameworkSelector, sublime_plugin.WindowCommand):
     config_key = "resource"
     interface_field = "resource"
     item_name = "resource"
 
 
-class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelectCommand):
+class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelector, sublime_plugin.WindowCommand):
     config_key = "__locale"
     interface_field = "languages"
     item_name = "locale"
@@ -523,23 +719,70 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
         self._queued_tasks = [
             task for task in tasks if isinstance(task, dict) and isinstance(task.get("name"), str)
         ]
-        labels = ["Add Task to Queue…", "Remove Task from Queue…"]
+        labels = [
+            "Start Queue",
+            "Pause Runtime",
+            "Continue Runtime",
+            "Stop Runtime",
+            "Add Task to Queue…",
+            "Remove Task from Queue…",
+        ]
         labels.extend(
             f"Queue {index + 1}: {task['name']}" for index, task in enumerate(self._queued_tasks)
         )
         self.window.show_quick_panel(labels, self._on_done)
 
     def _on_done(self, index: int) -> None:
-        if index == 0:
-            self.window.run_command("maa_framework_add_task")
-        elif index == 1:
-            self.window.run_command("maa_framework_remove_task")
-        elif 2 <= index < len(self._queued_tasks) + 2:
-            task_name = self._queued_tasks[index - 2]["name"]
+        commands = [
+            "maa_framework_start",
+            "maa_framework_pause",
+            "maa_framework_continue",
+            "maa_framework_stop",
+            "maa_framework_add_task",
+            "maa_framework_remove_task",
+        ]
+        if 0 <= index < len(commands):
+            self.window.run_command(commands[index])
+        elif index >= len(commands) and index < len(self._queued_tasks) + len(commands):
+            task_name = self._queued_tasks[index - len(commands)]["name"]
             locations = [task for task in _project_tasks(self._project) if task[0] == task_name]
             if locations:
                 _, file, line = locations[0]
                 self.window.open_file(f"{file}:{line + 1}:1", sublime.ENCODED_POSITION)
+
+
+class MaaFrameworkStartCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message("MaaFramework: no active project")
+            return
+        config = _project_config(project)
+        tasks = config.get("task") if config else None
+        if not isinstance(tasks, list) or not tasks:
+            sublime.status_message("MaaFramework: task queue is empty")
+            return
+        sublime.status_message("MaaFramework: preparing runtime…")
+        sublime.set_timeout_async(lambda: _runtime_manager.start(project, self.window))
+
+
+class _MaaFrameworkRuntimeControl:
+    method = ""
+
+    def run(self) -> None:
+        _runtime_manager.control(self.method)
+
+
+class MaaFrameworkPauseCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
+    method = "pause"
+
+
+class MaaFrameworkContinueCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
+    method = "continue"
+
+
+class MaaFrameworkStopCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
+    method = "stop"
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):
@@ -813,17 +1056,32 @@ class LspMaaFrameworkPlugin(LspPlugin):
         for candidate in candidates:
             if candidate.is_file():
                 return candidate.resolve()
-        return cls._extract_packaged_server()
+        return cls._extract_packaged_file(SERVER_RESOURCE, SERVER_FILE)
+
+    @classmethod
+    def _resolve_runtime_path(cls) -> Path | None:
+        here = Path(__file__).resolve().parent
+        for candidate in [
+            here / RUNTIME_FILE,
+            here / ".." / "maa-lsp" / "dist" / RUNTIME_FILE,
+        ]:
+            if candidate.is_file():
+                return candidate.resolve()
+        return cls._extract_packaged_file(RUNTIME_RESOURCE, RUNTIME_FILE)
 
     @staticmethod
     def _extract_packaged_server() -> Path | None:
+        return LspMaaFrameworkPlugin._extract_packaged_file(SERVER_RESOURCE, SERVER_FILE)
+
+    @staticmethod
+    def _extract_packaged_file(resource: str, file_name: str) -> Path | None:
         try:
-            content = sublime.load_binary_resource(SERVER_RESOURCE)
+            content = sublime.load_binary_resource(resource)
         except Exception:
             return None
 
         target_dir = Path(sublime.cache_path()) / PACKAGE_NAME
-        target = target_dir / SERVER_FILE
+        target = target_dir / file_name
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
             if not target.is_file() or target.read_bytes() != content:
@@ -838,4 +1096,5 @@ def plugin_loaded() -> None:
 
 
 def plugin_unloaded() -> None:
+    _runtime_manager.shutdown()
     LspMaaFrameworkPlugin.unregister()

@@ -54,6 +54,18 @@ class FakeSession:
         on_result(self.result)
 
 
+class FakeRuntimeManager:
+    def __init__(self):
+        self.started = None
+        self.controls = []
+
+    def start(self, project, window):
+        self.started = (project, window)
+
+    def control(self, method):
+        self.controls.append(method)
+
+
 class FakeNodeRunner:
     def node_env(self):
         return {"NODE_TEST_RUNTIME": "1"}
@@ -562,9 +574,17 @@ class PluginTests(unittest.TestCase):
         panel.run()
         self.assertEqual(
             window.labels,
-            ["Add Task to Queue…", "Remove Task from Queue…", "Queue 1: Daily"],
+            [
+                "Start Queue",
+                "Pause Runtime",
+                "Continue Runtime",
+                "Stop Runtime",
+                "Add Task to Queue…",
+                "Remove Task from Queue…",
+                "Queue 1: Daily",
+            ],
         )
-        window.on_done(0)
+        window.on_done(4)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -573,6 +593,28 @@ class PluginTests(unittest.TestCase):
         window.on_done(0)
         config = json.loads(config_file.read_text(encoding="utf-8"))
         self.assertEqual(config["task"], [])
+
+    def test_starts_and_controls_native_task_queue(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        (project / "interface.json").write_text("{}", encoding="utf-8")
+        config = project / "config" / "maa_pi_config.json"
+        config.parent.mkdir()
+        config.write_text('{"task":[{"name":"Daily"}]}', encoding="utf-8")
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+        runtime = FakeRuntimeManager()
+        self.plugin._runtime_manager = runtime
+
+        self.plugin.MaaFrameworkStartCommand(window).run()
+        self.plugin.MaaFrameworkPauseCommand(window).run()
+        self.plugin.MaaFrameworkContinueCommand(window).run()
+        self.plugin.MaaFrameworkStopCommand(window).run()
+
+        self.assertEqual(runtime.started, (project, window))
+        self.assertEqual(runtime.controls, ["pause", "continue", "stop"])
 
 
 if __name__ == "__main__":

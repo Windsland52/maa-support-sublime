@@ -100,6 +100,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `MaaFramework: Control Panel` 管理 `maa_pi_config.json` 中的持久化任务队列。可以从 interface task 中添加、删除队列实例，或选择队列项跳到对应 pipeline entry。
 
+`Start Queue` 使用隔离的 native worker 执行队列；首次运行会把设置中的 `@maaxyz/maa-node` 安装到 Sublime cache。控制面板和命令面板均提供 Pause、Continue、Stop，native worker 异常退出不会中断 maa-lsp。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

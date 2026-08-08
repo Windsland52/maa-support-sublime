@@ -65,3 +65,9 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 `maa/evaluateTask` 接收 `{ "uri": string, "task": string }`。server 根据 URI 路由到目录层级最深的 MaaFramework 项目，刷新当前 `InterfaceBundle` 后返回 `evalTask` 的 resource layer 合并结果；任务或项目不存在时返回 `null`。该请求不实现 MaaAssistantArknights 专用的 expression 语义。
 
 `maa/reloadProjects` 无参数，串行等待已有刷新后重新扫描所有 workspace folder，并重建 interface bundle、`maatools.config.mts` 和 `maa_pi_config.json` 监听；成功后返回 `{ "projects": number }`。
+
+## Native runtime worker
+
+`src/runtime.ts` 独立构建为无第三方裸 import 的 `runtime.mjs`，不运行在 maa-lsp 进程内。它从参数指定的 cache `node_modules` 动态加载 `@maaxyz/maa-node`，解析活动项目的 interface / `maa_pi_config.json`，使用 pipeline manager 构建 controller、resource 和 task runtime，并通过逐行 JSON 请求处理 `start`、`pause`、`continue`、`stop`、`shutdown`。Tasker、controller、resource 与 context 通知作为 event 消息返回宿主。
+
+pause 在 tasker sink 上施加异步闸门并阻止下一队列项开始；continue 释放闸门；stop 同时释放暂停等待并调用 `Tasker.post_stop()`。worker 与 LSP 分进程，native module 异常退出不会终止语言服务。

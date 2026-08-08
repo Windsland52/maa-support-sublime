@@ -12,6 +12,26 @@
                   "type": "string",
                   "default": "auto",
                   "markdownDescription": "Absolute path to a custom maa-lsp server. Use `auto` to run the server bundled with this package."
+                },
+                "maa_version": {
+                  "type": "string",
+                  "default": "5.12.2",
+                  "markdownDescription": "Semantic version of `@maaxyz/maa-node` installed into the Sublime cache for task execution."
+                },
+                "npm_registry": {
+                  "type": "string",
+                  "default": "https://registry.npmjs.org",
+                  "markdownDescription": "npm registry used only to install the selected MaaFramework native runtime."
+                },
+                "debug_mode": {
+                  "type": "boolean",
+                  "default": true,
+                  "markdownDescription": "Enable MaaFramework native debug logging for runtime sessions."
+                },
+                "save_draw": {
+                  "type": "boolean",
+                  "default": false,
+                  "markdownDescription": "Ask MaaFramework to save recognition drawing output in the project debug directory."
                 }
               }
             }

@@ -1,15 +1,29 @@
 import { defineConfig } from 'tsdown'
 
-export default defineConfig({
-  entry: ['src/server.ts'],
-  format: 'esm',
+const shared = {
+  format: 'esm' as const,
   alias: {
     'jsonc-parser': 'jsonc-parser/lib/esm/main.js'
   },
   outDir: 'dist',
-  clean: true,
+  outputOptions: {
+    codeSplitting: false
+  },
   deps: {
-    alwaysBundle: id => !id.startsWith('node:'),
+    alwaysBundle: (id: string) => !id.startsWith('node:'),
     onlyAllowBundle: false
   }
-})
+}
+
+export default defineConfig([
+  {
+    ...shared,
+    entry: ['src/server.ts'],
+    clean: true
+  },
+  {
+    ...shared,
+    entry: ['src/runtime.ts'],
+    clean: false
+  }
+])

@@ -16,6 +16,22 @@
     "command": "maa_framework_control_panel"
   },
   {
+    "caption": "MaaFramework: Start Queue",
+    "command": "maa_framework_start"
+  },
+  {
+    "caption": "MaaFramework: Pause Runtime",
+    "command": "maa_framework_pause"
+  },
+  {
+    "caption": "MaaFramework: Continue Runtime",
+    "command": "maa_framework_continue"
+  },
+  {
+    "caption": "MaaFramework: Stop Runtime",
+    "command": "maa_framework_stop"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },
