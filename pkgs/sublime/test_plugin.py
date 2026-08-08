@@ -444,9 +444,10 @@ class PluginTests(unittest.TestCase):
 
         resource = self.plugin.MaaFrameworkSelectResourceCommand(window)
         resource.run()
+        project_label = str(Path("apps", "demo"))
         self.assertEqual(
             window.labels,
-            ["apps\\demo — Default", "apps\\demo — Extra"],
+            [f"{project_label} — Default", f"{project_label} — Extra"],
         )
         window.on_done(1)
 
@@ -454,7 +455,7 @@ class PluginTests(unittest.TestCase):
         locale.run()
         self.assertEqual(
             window.labels,
-            ["apps\\demo — English", "apps\\demo — Chinese"],
+            [f"{project_label} — English", f"{project_label} — Chinese"],
         )
         window.on_done(1)
 
@@ -555,11 +556,12 @@ class PluginTests(unittest.TestCase):
         command = self.plugin.MaaFrameworkGotoTaskCommand(window)
         command.run()
 
+        pipeline_label = str(Path("resource", "pipeline", "main.jsonc"))
         self.assertEqual(
             window.labels,
             [
-                "Alpha — resource\\pipeline\\main.jsonc:4",
-                "Beta — resource\\pipeline\\main.jsonc:9",
+                f"Alpha — {pipeline_label}:4",
+                f"Beta — {pipeline_label}:9",
             ],
         )
         window.on_done(1)
