@@ -1,4 +1,4 @@
-# MaaLSP (Sublime Text plugin)
+# LSP-MaaFramework (Sublime Text plugin)
 
 Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 包拉起内置的 maa-lsp，为 MaaFramework pipeline / interface JSON 提供诊断、定义跳转和悬停预览。
 
@@ -15,9 +15,9 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 ### GitHub Release
 
-1. 从 [GitHub Releases](https://github.com/Windsland52/maa-support-sublime/releases) 下载 `MaaLSP.sublime-package`。
+1. 从 [GitHub Releases](https://github.com/Windsland52/maa-support-sublime/releases) 下载 `LSP-MaaFramework.sublime-package`。
 2. 在 Sublime Text 中打开 `Preferences > Browse Packages…`，进入其同级的 `Installed Packages` 目录。
-3. 把文件复制到 `Installed Packages/MaaLSP.sublime-package`。
+3. 把文件复制到 `Installed Packages/LSP-MaaFramework.sublime-package`。
 4. 重启 Sublime Text。
 
 插件会在启动 LSP 前把内置的 `server.mjs` 解压到 Sublime cache，因此压缩安装和 Package Control 安装使用同一套产物。
@@ -28,9 +28,11 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 1. 执行 `Package Control: Add Repository`；
 2. 输入 `https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json`；
-3. 执行 `Package Control: Install Package` 并选择 `MaaLSP`。
+3. 执行 `Package Control: Install Package` 并选择 `LSP-MaaFramework`。
 
 默认 channel 收录后将不再需要第 1、2 步。
+
+从 `MaaLSP` 0.1.x 升级时，先通过 `Package Control: Remove Package` 删除旧包，再安装 `LSP-MaaFramework`，避免两个 helper 同时启动。
 
 ## 开发安装
 
@@ -41,16 +43,16 @@ pnpm install
 pnpm build
 ```
 
-再把 `pkgs/sublime` 符号链接到 Sublime Packages 目录，包名必须为 `MaaLSP`：
+再把 `pkgs/sublime` 符号链接到 Sublime Packages 目录，包名必须为 `LSP-MaaFramework`：
 
 ```powershell
-$dest = Join-Path $env:APPDATA "Sublime Text\Packages\MaaLSP"
+$dest = Join-Path $env:APPDATA "Sublime Text\Packages\LSP-MaaFramework"
 New-Item -ItemType SymbolicLink -Path $dest -Target "C:\github\maa-support-sublime\pkgs\sublime"
 ```
 
 ## 配置
 
-发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，在 `MaaLSP.sublime-settings` 的 User 设置中指定：
+发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，在 `LSP-MaaFramework.sublime-settings` 的 User 设置中指定：
 
 ```json
 {

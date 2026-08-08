@@ -11,7 +11,7 @@ Sublime Text 插件 + maa-lsp，面向 MaaFramework pipeline 开发。
 - task 定义和合并结果的悬停预览
 - 支持未保存的编辑器缓冲区
 - 递归发现所有 workspace folder 中的 Maa interface 项目
-- 可直接安装的 `MaaLSP.sublime-package`
+- 可直接安装的 `LSP-MaaFramework.sublime-package`
 
 资源发现与 `maa-support-extension` 对齐：递归查找 `interface.json` / `interface.jsonc`，跳过隐藏目录、`node_modules`、`MaaUtils` 和 `MaaDeps`。每个项目从 `config/maa_pi_config.json` 读取 controller/resource 选择。
 
@@ -33,7 +33,7 @@ pnpm test
 pnpm package:sublime
 ```
 
-安装包输出到 `release/MaaLSP.sublime-package`。开发态安装和用户安装方式见 [`pkgs/sublime/README.md`](pkgs/sublime/README.md)。
+安装包输出到 `release/LSP-MaaFramework.sublime-package`。开发态安装和用户安装方式见 [`pkgs/sublime/README.md`](pkgs/sublime/README.md)。
 
 公开仓库：<https://github.com/Windsland52/maa-support-sublime>
 

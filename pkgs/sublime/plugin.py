@@ -7,13 +7,13 @@ from LSP.plugin import LspPlugin
 from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
 
-SETTINGS_FILE = "MaaLSP.sublime-settings"
-PACKAGE_NAME = "MaaLSP"
+SETTINGS_FILE = "LSP-MaaFramework.sublime-settings"
+PACKAGE_NAME = "LSP-MaaFramework"
 SERVER_FILE = "server.mjs"
 SERVER_RESOURCE = f"Packages/{PACKAGE_NAME}/{SERVER_FILE}"
 
 
-class MaaLspPlugin(LspPlugin):
+class LspMaaFrameworkPlugin(LspPlugin):
     """LSP helper package that launches the maa-lsp language server."""
 
     @classmethod
@@ -22,7 +22,7 @@ class MaaLspPlugin(LspPlugin):
         if server_path is None:
             raise PluginStartError(
                 "maa-lsp: bundled server.mjs not found. "
-                "Reinstall MaaLSP, build the development repository, "
+                "Reinstall LSP-MaaFramework, build the development repository, "
                 f"or set server_path in {SETTINGS_FILE}."
             )
         context.variables["server_path"] = str(server_path)
@@ -64,8 +64,8 @@ class MaaLspPlugin(LspPlugin):
 
 
 def plugin_loaded() -> None:
-    MaaLspPlugin.register()
+    LspMaaFrameworkPlugin.register()
 
 
 def plugin_unloaded() -> None:
-    MaaLspPlugin.unregister()
+    LspMaaFrameworkPlugin.unregister()

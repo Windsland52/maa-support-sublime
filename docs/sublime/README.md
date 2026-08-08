@@ -4,11 +4,11 @@
 
 ## 包内容
 
-`pnpm package:sublime` 生成 `release/MaaLSP.sublime-package`。它是 ZIP 格式，包含：
+`pnpm package:sublime` 生成 `release/LSP-MaaFramework.sublime-package`。它是 ZIP 格式，包含：
 
 - `.python-version`，固定为 `3.8`，确保插件与新版 LSP 运行在相同的 Sublime Python 宿主；
 - `plugin.py`
-- `MaaLSP.sublime-settings`
+- `LSP-MaaFramework.sublime-settings`
 - `dependencies.json`
 - 独立的 `server.mjs`
 - README、LICENSE、第三方声明
@@ -26,9 +26,13 @@
 
 因此 GitHub Release、Package Control 和开发符号链接共用一份插件实现。
 
+## 包名迁移
+
+0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。
+
 ## 自动化
 
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试和安装包构建；
-- 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `MaaLSP.sublime-package`；
+- 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `LSP-MaaFramework.sublime-package`；
 - 根目录 `repository.json` 使用 schema 3 和显式 GitHub Release 下载地址，兼容 Package Control 3.4.1，允许用户在正式收录前通过 `Add Repository` 安装；
 - Package Control 默认 channel 条目需在首个 Release 建立后另行提交。

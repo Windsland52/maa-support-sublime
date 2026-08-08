@@ -12,7 +12,8 @@ test('custom Package Control repository stays compatible with schema 3 clients',
 
   const [release] = repository.packages[0].releases
   assert.equal(release.version, lspPackage.version)
-  assert.match(release.url, new RegExp(`/v${release.version}/MaaLSP\\.sublime-package$`))
+  assert.equal(repository.packages[0].name, 'LSP-MaaFramework')
+  assert.match(release.url, new RegExp(`/v${release.version}/LSP-MaaFramework\\.sublime-package$`))
   assert.match(release.date, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
   assert.deepEqual(release.platforms, ['*'])
   assert.equal(release.sublime_text, '>=4000')

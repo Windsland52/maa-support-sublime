@@ -66,16 +66,23 @@ class PluginTests(unittest.TestCase):
         self.temp.cleanup()
 
     def test_extracts_and_refreshes_packaged_server(self):
-        target = self.plugin.MaaLspPlugin._extract_packaged_server()
+        target = self.plugin.LspMaaFrameworkPlugin._extract_packaged_server()
         self.assertEqual(target.read_bytes(), b"first")
 
         self.sublime.server = b"second"
-        target = self.plugin.MaaLspPlugin._extract_packaged_server()
+        target = self.plugin.LspMaaFrameworkPlugin._extract_packaged_server()
         self.assertEqual(target.read_bytes(), b"second")
 
     def test_selects_python_38_plugin_host(self):
         version = Path(__file__).with_name(".python-version").read_text(encoding="utf-8").strip()
         self.assertEqual(version, "3.8")
+
+    def test_uses_package_control_helper_name(self):
+        self.assertEqual(self.plugin.PACKAGE_NAME, "LSP-MaaFramework")
+        self.assertEqual(
+            self.plugin.SERVER_RESOURCE,
+            "Packages/LSP-MaaFramework/server.mjs",
+        )
 
 
 if __name__ == "__main__":

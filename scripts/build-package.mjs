@@ -4,13 +4,16 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const destination = path.join(root, 'release', 'MaaLSP.sublime-package')
+const destination = path.join(root, 'release', 'LSP-MaaFramework.sublime-package')
 const serverSource = path.join(root, 'pkgs', 'maa-lsp', 'dist', 'server.mjs')
 
 const files = [
   ['.python-version', path.join(root, 'pkgs', 'sublime', '.python-version')],
   ['plugin.py', path.join(root, 'pkgs', 'sublime', 'plugin.py')],
-  ['MaaLSP.sublime-settings', path.join(root, 'pkgs', 'sublime', 'MaaLSP.sublime-settings')],
+  [
+    'LSP-MaaFramework.sublime-settings',
+    path.join(root, 'pkgs', 'sublime', 'LSP-MaaFramework.sublime-settings')
+  ],
   ['dependencies.json', path.join(root, 'pkgs', 'sublime', 'dependencies.json')],
   ['README.md', path.join(root, 'pkgs', 'sublime', 'README.md')],
   ['LICENSE', path.join(root, 'LICENSE')],
@@ -23,7 +26,7 @@ const pythonVersion = (
 ).trim()
 if (pythonVersion !== '3.8') {
   throw new Error(
-    `MaaLSP must use the Python 3.8 plugin host, found ${pythonVersion || 'no version'}`
+    `LSP-MaaFramework must use the Python 3.8 plugin host, found ${pythonVersion || 'no version'}`
   )
 }
 
