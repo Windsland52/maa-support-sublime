@@ -32,6 +32,14 @@
     "command": "maa_framework_stop"
   },
   {
+    "caption": "MaaFramework: Show Runtime Status",
+    "command": "maa_framework_runtime_status"
+  },
+  {
+    "caption": "MaaFramework: Show Latest Recognition / Action Detail",
+    "command": "maa_framework_runtime_detail"
+  },
+  {
     "caption": "MaaFramework: Select Resource",
     "command": "maa_framework_select_resource"
   },

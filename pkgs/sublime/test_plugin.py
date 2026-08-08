@@ -58,12 +58,19 @@ class FakeRuntimeManager:
     def __init__(self):
         self.started = None
         self.controls = []
+        self.shown = []
 
     def start(self, project, window):
         self.started = (project, window)
 
     def control(self, method):
         self.controls.append(method)
+
+    def show_status(self, window):
+        self.shown.append(("status", window))
+
+    def show_latest_detail(self, window):
+        self.shown.append(("detail", window))
 
 
 class FakeNodeRunner:
@@ -579,12 +586,14 @@ class PluginTests(unittest.TestCase):
                 "Pause Runtime",
                 "Continue Runtime",
                 "Stop Runtime",
+                "Show Runtime Status…",
+                "Show Latest Recognition / Action Detail…",
                 "Add Task to Queue…",
                 "Remove Task from Queue…",
                 "Queue 1: Daily",
             ],
         )
-        window.on_done(4)
+        window.on_done(6)
         self.assertEqual(window.ran_command, ("maa_framework_add_task", None))
 
         remove = self.plugin.MaaFrameworkRemoveTaskCommand(window)
@@ -612,9 +621,12 @@ class PluginTests(unittest.TestCase):
         self.plugin.MaaFrameworkPauseCommand(window).run()
         self.plugin.MaaFrameworkContinueCommand(window).run()
         self.plugin.MaaFrameworkStopCommand(window).run()
+        self.plugin.MaaFrameworkRuntimeStatusCommand(window).run()
+        self.plugin.MaaFrameworkRuntimeDetailCommand(window).run()
 
         self.assertEqual(runtime.started, (project, window))
         self.assertEqual(runtime.controls, ["pause", "continue", "stop"])
+        self.assertEqual(runtime.shown, [("status", window), ("detail", window)])
 
 
 if __name__ == "__main__":

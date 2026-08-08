@@ -112,9 +112,13 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
         add_sink(sink) { this.sink = sink }
         add_context_sink(sink) { this.contextSink = sink }
         post_task(entry) {
-          this.sink?.(0, { msg: 'PipelineNode.Starting', name: entry })
+          this.sink?.(0, { msg: 'RecognitionNode.Succeeded', name: entry, reco_id: 7 })
           return new Operation()
         }
+        recognition_detail(id) {
+          return { id, name: 'Entry', raw: new Uint8Array([1, 2]), draws: [new Uint8Array([3])] }
+        }
+        action_detail(id) { return { id, name: 'Click' } }
         post_stop() { return new Operation() }
         destroy() {}
       }
@@ -172,6 +176,14 @@ test('native worker starts and controls a MaaFramework task queue', async () => 
       message => message.event === 'state' && message.params.status === 'finished'
     )
     assert.equal(finished.params.status, 'finished')
+    const status = await client.request('status')
+    assert.equal(status.result.status, 'finished')
+    assert.deepEqual(status.result.queue, ['First', 'Second'])
+    assert.ok(status.result.history.some(item => item.event === 'tasker'))
+    const detail = await client.request('recognitionDetail', { id: 7 })
+    assert.equal(detail.result.info.name, 'Entry')
+    assert.equal(detail.result.raw, 'data:image/png;base64,AQI=')
+    assert.deepEqual(detail.result.draws, ['data:image/png;base64,Aw=='])
     assert.equal((await client.request('stop')).result, true)
     assert.equal((await client.shutdown()).result, true)
     client = undefined

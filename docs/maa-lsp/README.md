@@ -71,3 +71,5 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 `src/runtime.ts` 独立构建为无第三方裸 import 的 `runtime.mjs`，不运行在 maa-lsp 进程内。它从参数指定的 cache `node_modules` 动态加载 `@maaxyz/maa-node`，解析活动项目的 interface / `maa_pi_config.json`，使用 pipeline manager 构建 controller、resource 和 task runtime，并通过逐行 JSON 请求处理 `start`、`pause`、`continue`、`stop`、`shutdown`。Tasker、controller、resource 与 context 通知作为 event 消息返回宿主。
 
 pause 在 tasker sink 上施加异步闸门并阻止下一队列项开始；continue 释放闸门；stop 同时释放暂停等待并调用 `Tasker.post_stop()`。worker 与 LSP 分进程，native module 异常退出不会终止语言服务。
+
+worker 保留最近 500 条 controller/resource/tasker/task/state event。`status` 返回当前状态、当前任务、队列与该有界历史；`recognitionDetail`、`actionDetail` 和 `nodeDetail` 分别读取 native Tasker/Resource 的识别、动作和 pipeline node 详情。识别原图与 draws 转换为 PNG data URL 后跨进程返回。

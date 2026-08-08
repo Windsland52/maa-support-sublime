@@ -57,6 +57,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 `Pause Runtime` 在 Tasker 通知边界暂停并阻止下一队列项，`Continue Runtime` 释放等待，`Stop Runtime` 调用 native `post_stop()`。相同操作也作为独立命令出现在命令面板。插件卸载时向 worker 发送 shutdown；worker 与 maa-lsp 分进程，因此 native 崩溃不影响语言服务。
 
+`Show Runtime Status` 将 worker 当前状态、当前任务、队列和最近 500 条 controller/resource/tasker event 写入只读 JSON。`Show Latest Recognition / Action Detail` 根据实时通知中的最新 `reco_id` / `action_id` 请求 native 详情；JSON 展示完整元数据，只把可能很大的 PNG data URL 折叠成长度占位（图像查看命令另行处理）。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

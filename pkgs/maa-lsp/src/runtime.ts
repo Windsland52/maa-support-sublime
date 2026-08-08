@@ -35,12 +35,19 @@ let session: RuntimeSession | null = null
 let paused = false
 let resume: (() => void) | null = null
 let stopped = false
+let runtimeStatus = 'idle'
+let currentTask: string | null = null
+const history: Array<{ event: string; params: unknown }> = []
 
 function send(message: unknown) {
   process.stdout.write(`${JSON.stringify(message)}\n`)
 }
 
 function notify(event: string, params: unknown) {
+  history.push({ event, params })
+  if (history.length > 500) {
+    history.splice(0, history.length - 500)
+  }
   send({ event, params })
 }
 
@@ -94,6 +101,7 @@ async function destroySession() {
   session.resource.destroy()
   session.controller.destroy()
   session = null
+  currentTask = null
 }
 
 async function setup(params: Record<string, unknown>) {
@@ -173,8 +181,10 @@ async function setup(params: Record<string, unknown>) {
     throw new Error('Cannot initialize MaaFramework Tasker')
   }
   session = { controller, resource, tasker, tasks: taskRuntime.tasks }
+  history.length = 0
   paused = false
   stopped = false
+  runtimeStatus = 'ready'
   return {
     controller: controllerRuntime.name,
     resource: resourceRuntime.name,
@@ -201,13 +211,15 @@ async function runQueue() {
   if (!current) {
     return
   }
-  notify('state', { status: 'running', queue: current.tasks.map(task => task.name) })
+  runtimeStatus = 'running'
+  notify('state', { status: runtimeStatus, queue: current.tasks.map(task => task.name) })
   try {
     for (const task of current.tasks) {
       if (stopped || current !== session) {
         break
       }
       await waitWhilePaused()
+      currentTask = task.name
       notify('task', { status: 'starting', name: task.name, entry: task.entry })
       const result = await (current.tasker as any)
         .post_task(task.entry, task.pipeline_override)
@@ -221,9 +233,36 @@ async function runQueue() {
         break
       }
     }
-    notify('state', { status: stopped ? 'stopped' : 'finished' })
+    currentTask = null
+    runtimeStatus = stopped ? 'stopped' : 'finished'
+    notify('state', { status: runtimeStatus })
   } catch (error) {
-    notify('state', { status: 'failed', error: String(error) })
+    currentTask = null
+    runtimeStatus = 'failed'
+    notify('state', { status: runtimeStatus, error: String(error) })
+  }
+}
+
+function imageDataUrl(value: Uint8Array | ArrayBuffer) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value)
+  return `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`
+}
+
+function recognitionDetail(id: unknown) {
+  if (!session || (typeof id !== 'string' && typeof id !== 'number')) {
+    return null
+  }
+  const detail = (session.tasker as any).recognition_detail(String(id))
+  if (!detail) {
+    return null
+  }
+  const info = { ...detail }
+  delete info.raw
+  delete info.draws
+  return {
+    info,
+    raw: imageDataUrl(detail.raw),
+    draws: detail.draws.map(imageDataUrl)
   }
 }
 
@@ -236,13 +275,15 @@ async function handle(request: Request): Promise<unknown> {
     }
     case 'pause':
       paused = true
-      notify('state', { status: 'paused' })
+      runtimeStatus = 'paused'
+      notify('state', { status: runtimeStatus })
       return true
     case 'continue':
       paused = false
       resume?.()
       resume = null
-      notify('state', { status: 'running' })
+      runtimeStatus = 'running'
+      notify('state', { status: runtimeStatus })
       return true
     case 'stop':
       stopped = true
@@ -252,8 +293,26 @@ async function handle(request: Request): Promise<unknown> {
       if (session) {
         await (session.tasker as any).post_stop().wait()
       }
-      notify('state', { status: 'stopped' })
+      runtimeStatus = 'stopped'
+      notify('state', { status: runtimeStatus })
       return true
+    case 'status':
+      return {
+        status: runtimeStatus,
+        currentTask,
+        queue: session?.tasks.map(task => task.name) ?? [],
+        history
+      }
+    case 'recognitionDetail':
+      return recognitionDetail(request.params?.id)
+    case 'actionDetail':
+      return session && request.params
+        ? ((session.tasker as any).action_detail(String(request.params.id)) ?? null)
+        : null
+    case 'nodeDetail':
+      return session && typeof request.params?.task === 'string'
+        ? ((session.resource as any).get_node_data(request.params.task) ?? null)
+        : null
     case 'shutdown':
       await destroySession()
       return true

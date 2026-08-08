@@ -102,6 +102,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 `Start Queue` 使用隔离的 native worker 执行队列；首次运行会把设置中的 `@maaxyz/maa-node` 安装到 Sublime cache。控制面板和命令面板均提供 Pause、Continue、Stop，native worker 异常退出不会中断 maa-lsp。
 
+`Show Runtime Status` 展示有界实时事件历史；`Show Latest Recognition / Action Detail` 从 native Tasker 读取最近一次识别或动作的完整元数据。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

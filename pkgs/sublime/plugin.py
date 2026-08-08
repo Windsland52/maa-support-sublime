@@ -41,6 +41,9 @@ class MaaRuntimeManager:
         self._callbacks = {}
         self._next_id = 1
         self._lock = threading.Lock()
+        self.history = []
+        self.latest_recognition = None
+        self.latest_action = None
 
     def start(self, project: Path, window) -> None:
         self.window = window
@@ -73,6 +76,67 @@ class MaaRuntimeManager:
             sublime.status_message("MaaFramework: runtime is not running")
             return
         self.request(method, {}, lambda _result: None)
+
+    def show_status(self, window) -> None:
+        if not self.process or self.process.poll() is not None:
+            _show_report(
+                window,
+                "MaaFramework Runtime Status",
+                json.dumps(
+                    {"status": self.state, "history": self.history},
+                    ensure_ascii=False,
+                    indent=4,
+                )
+                + "\n",
+                "Packages/JSON/JSON.sublime-syntax",
+            )
+            return
+        self.request(
+            "status",
+            {},
+            lambda result: _show_report(
+                window,
+                "MaaFramework Runtime Status",
+                json.dumps(result, ensure_ascii=False, indent=4) + "\n",
+                "Packages/JSON/JSON.sublime-syntax",
+            ),
+        )
+
+    def show_latest_detail(self, window) -> None:
+        if self.latest_recognition is not None:
+            method = "recognitionDetail"
+            detail_id = self.latest_recognition
+        elif self.latest_action is not None:
+            method = "actionDetail"
+            detail_id = self.latest_action
+        else:
+            sublime.status_message("MaaFramework: no recognition or action detail is available")
+            return
+        if not self.process or self.process.poll() is not None:
+            sublime.status_message("MaaFramework: runtime is not running")
+            return
+
+        def show(result) -> None:
+            if result is None:
+                sublime.status_message("MaaFramework: native detail is no longer available")
+                return
+            display = dict(result) if isinstance(result, dict) else result
+            if isinstance(display, dict):
+                if isinstance(display.get("raw"), str):
+                    display["raw"] = f"<PNG data URL, {len(display['raw'])} chars>"
+                if isinstance(display.get("draws"), list):
+                    display["draws"] = [
+                        f"<PNG data URL, {len(item)} chars>" if isinstance(item, str) else item
+                        for item in display["draws"]
+                    ]
+            _show_report(
+                window,
+                f"MaaFramework {method} {detail_id}",
+                json.dumps(display, ensure_ascii=False, indent=4) + "\n",
+                "Packages/JSON/JSON.sublime-syntax",
+            )
+
+        self.request(method, {"id": detail_id}, show)
 
     def request(self, method: str, params: dict[str, Any], callback) -> None:
         process = self.process
@@ -201,6 +265,9 @@ class MaaRuntimeManager:
         sublime.status_message(f"MaaFramework: started {len(tasks)} queued task(s)")
 
     def _event(self, event: str, params: Any) -> None:
+        self.history.append({"event": event, "params": params})
+        if len(self.history) > 500:
+            del self.history[: len(self.history) - 500]
         if event == "state" and isinstance(params, dict):
             self.state = str(params.get("status", self.state))
             sublime.status_message(f"MaaFramework: {self.state}")
@@ -208,6 +275,11 @@ class MaaRuntimeManager:
             sublime.status_message(
                 f"MaaFramework: {params.get('name', 'task')} {params.get('status', '')}"
             )
+        elif event == "tasker" and isinstance(params, dict):
+            if params.get("reco_id") is not None:
+                self.latest_recognition = params["reco_id"]
+            if params.get("action_id") is not None:
+                self.latest_action = params["action_id"]
 
     def _runtime_error(self, error: Any) -> None:
         self.state = "failed"
@@ -630,11 +702,16 @@ def _environment_report(window) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _show_report(window, name: str, content: str) -> None:
+def _show_report(
+    window,
+    name: str,
+    content: str,
+    syntax: str = "Packages/Text/Plain text.tmLanguage",
+) -> None:
     output = window.new_file()
     output.set_name(name)
     output.set_scratch(True)
-    output.assign_syntax("Packages/Text/Plain text.tmLanguage")
+    output.assign_syntax(syntax)
     output.run_command("append", {"characters": content})
     output.set_read_only(True)
 
@@ -724,6 +801,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "Pause Runtime",
             "Continue Runtime",
             "Stop Runtime",
+            "Show Runtime Status…",
+            "Show Latest Recognition / Action Detail…",
             "Add Task to Queue…",
             "Remove Task from Queue…",
         ]
@@ -738,6 +817,8 @@ class MaaFrameworkControlPanelCommand(sublime_plugin.WindowCommand):
             "maa_framework_pause",
             "maa_framework_continue",
             "maa_framework_stop",
+            "maa_framework_runtime_status",
+            "maa_framework_runtime_detail",
             "maa_framework_add_task",
             "maa_framework_remove_task",
         ]
@@ -783,6 +864,16 @@ class MaaFrameworkContinueCommand(_MaaFrameworkRuntimeControl, sublime_plugin.Wi
 
 class MaaFrameworkStopCommand(_MaaFrameworkRuntimeControl, sublime_plugin.WindowCommand):
     method = "stop"
+
+
+class MaaFrameworkRuntimeStatusCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _runtime_manager.show_status(self.window)
+
+
+class MaaFrameworkRuntimeDetailCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        _runtime_manager.show_latest_detail(self.window)
 
 
 class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):
