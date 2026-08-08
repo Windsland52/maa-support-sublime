@@ -80,6 +80,7 @@ class FakeWindow:
         self.labels = []
         self.on_done = None
         self._views = []
+        self.opened = None
 
     def folders(self):
         return self._folders
@@ -90,6 +91,12 @@ class FakeWindow:
 
     def views(self):
         return self._views
+
+    def active_view(self):
+        return self._views[0] if self._views else None
+
+    def open_file(self, file_name, flags):
+        self.opened = (file_name, flags)
 
 
 class FakeSublime(types.ModuleType):
@@ -117,6 +124,7 @@ class PluginTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.sublime = FakeSublime(self.temp.name)
+        self.sublime.ENCODED_POSITION = 1
         lsp = types.ModuleType("LSP")
         lsp_plugin = types.ModuleType("LSP.plugin")
         lsp_plugin.LspPlugin = FakeLspPlugin
@@ -333,6 +341,47 @@ class PluginTests(unittest.TestCase):
         generic.statuses[self.plugin.STATUS_KEY] = "stale"
         self.plugin.MaaFrameworkProjectStatusListener().on_load_async(generic)
         self.assertNotIn(self.plugin.STATUS_KEY, generic.statuses)
+
+    def test_goes_to_task_in_active_resource(self):
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.jsonc"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text(
+            """
+            {
+                // Only top-level keys are tasks.
+                "Alpha": {
+                    "next": ["Beta"],
+                    "nested": { "NotATask": true }
+                },
+                "$Internal": {},
+                "Beta": {}
+            }
+            """,
+            encoding="utf-8",
+        )
+        (project / "interface.json").write_text(
+            '{"resource":[{"name":"Default","path":["resource"]}]}',
+            encoding="utf-8",
+        )
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
+
+        command = self.plugin.MaaFrameworkGotoTaskCommand(window)
+        command.run()
+
+        self.assertEqual(
+            window.labels,
+            [
+                "Alpha — resource\\pipeline\\main.jsonc:4",
+                "Beta — resource\\pipeline\\main.jsonc:9",
+            ],
+        )
+        window.on_done(1)
+        self.assertEqual(
+            window.opened,
+            (f"{pipeline}:9:1", self.sublime.ENCODED_POSITION),
+        )
 
 
 if __name__ == "__main__":

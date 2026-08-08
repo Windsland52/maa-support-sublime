@@ -88,6 +88,8 @@ Node runtime 由 `lsp_utils` 统一解析。可通过命令面板中的 `Prefere
 
 打开项目内文件时，状态栏会显示所属 interface 项目、当前 resource，以及已配置的 controller 和 locale。切换或保存文件后自动刷新。
 
+`MaaFramework: Goto Task` 列出当前 resource 中的 pipeline task，并显示定义文件和行号；选择后直接跳到任务声明。
+
 ## 功能
 
 | LSP 能力         | 说明                                                           |

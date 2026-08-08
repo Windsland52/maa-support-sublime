@@ -40,6 +40,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 打开 MaaFramework 项目内的文件时，状态栏显示 interface 的项目名和当前生效的 resource；已配置的 controller 与 locale 也会同时展示。切换文件、保存文件或执行上述选择命令后状态自动刷新，普通 JSON 文件不会残留 Maa 状态。
 
+`MaaFramework: Goto Task` 从当前文件所属项目的有效 resource path 中读取 `pipeline/**/*.{json,jsonc}` 和 `default_pipeline.json`。quick panel 按任务名排序并显示来源文件与行号；同名任务按 resource path 后层覆盖前层的顺序定位，`$` 开头的内部任务不显示。选择后以 encoded position 打开声明行。
+
 ## 包名迁移
 
 0.2.0 起公开包名从 `MaaLSP` 调整为 `LSP-MaaFramework`，以符合 Package Control 的 LSP helper 命名约定。Package Control 不会跨包名自动升级，0.1.x 用户需要移除旧包后安装新包。

@@ -18,5 +18,9 @@
   {
     "caption": "MaaFramework: Select Locale",
     "command": "maa_framework_select_locale"
+  },
+  {
+    "caption": "MaaFramework: Goto Task",
+    "command": "maa_framework_goto_task"
   }
 ]

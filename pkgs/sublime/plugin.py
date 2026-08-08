@@ -199,6 +199,160 @@ def _refresh_window_statuses(window) -> None:
         _update_view_status(view)
 
 
+def _active_project(window) -> Optional[Path]:
+    view = window.active_view()
+    if view and view.file_name():
+        project = _project_for_file(Path(view.file_name()))
+        if project:
+            return project
+    projects = {
+        interface_file.parent
+        for folder in window.folders()
+        for interface_file in _iter_interface_files(Path(folder))
+    }
+    return next(iter(projects)) if len(projects) == 1 else None
+
+
+def _top_level_key_lines(text: str) -> list[tuple[str, int]]:
+    result: list[tuple[str, int]] = []
+    depth = 0
+    line = 0
+    index = 0
+    while index < len(text):
+        char = text[index]
+        next_char = text[index + 1] if index + 1 < len(text) else ""
+        if char == "\n":
+            line += 1
+            index += 1
+            continue
+        if char == "/" and next_char == "/":
+            newline = text.find("\n", index + 2)
+            index = len(text) if newline < 0 else newline
+            continue
+        if char == "/" and next_char == "*":
+            end = text.find("*/", index + 2)
+            if end < 0:
+                break
+            line += text.count("\n", index, end + 2)
+            index = end + 2
+            continue
+        if char == "{":
+            depth += 1
+            index += 1
+            continue
+        if char == "}":
+            depth -= 1
+            index += 1
+            continue
+        if char != '"':
+            index += 1
+            continue
+        start = index
+        start_line = line
+        index += 1
+        escaped = False
+        while index < len(text):
+            current = text[index]
+            if current == "\n":
+                line += 1
+            if escaped:
+                escaped = False
+            elif current == "\\":
+                escaped = True
+            elif current == '"':
+                break
+            index += 1
+        if index >= len(text):
+            break
+        literal = text[start : index + 1]
+        index += 1
+        lookahead = index
+        while lookahead < len(text) and text[lookahead].isspace():
+            lookahead += 1
+        if depth == 1 and lookahead < len(text) and text[lookahead] == ":":
+            try:
+                key = json.loads(literal)
+            except ValueError:
+                continue
+            if isinstance(key, str):
+                result.append((key, start_line))
+    return result
+
+
+def _pipeline_files(project: Path) -> list[Path]:
+    interface_file = next(
+        (project / name for name in sorted(INTERFACE_FILES) if (project / name).is_file()),
+        None,
+    )
+    interface = _load_json_object(interface_file) if interface_file else None
+    if not interface:
+        return []
+    resources = interface.get("resource")
+    if not isinstance(resources, list) or not resources:
+        return []
+    config = _load_json_object(project / "config" / "maa_pi_config.json") or {}
+    selected = config.get("resource")
+    resource = next(
+        (
+            entry
+            for entry in resources
+            if isinstance(entry, dict) and entry.get("name") == selected
+        ),
+        None,
+    )
+    if resource is None:
+        resource = next((entry for entry in resources if isinstance(entry, dict)), None)
+    if resource is None:
+        return []
+    paths = resource.get("path")
+    if isinstance(paths, str):
+        paths = [paths]
+    if not isinstance(paths, list):
+        return []
+    files: list[Path] = []
+    for relative in paths:
+        if not isinstance(relative, str):
+            continue
+        root = (project / relative).resolve()
+        default_pipeline = root / "default_pipeline.json"
+        if default_pipeline.is_file():
+            files.append(default_pipeline)
+        pipeline = root / "pipeline"
+        if not pipeline.is_dir():
+            continue
+        files.extend(
+            file
+            for file in sorted(pipeline.rglob("*"))
+            if file.is_file()
+            and file.suffix in {".json", ".jsonc"}
+            and not any(_is_ignored_directory(part) for part in file.relative_to(pipeline).parts)
+        )
+    return files
+
+
+def _project_tasks(project: Path) -> list[tuple[str, Path, int]]:
+    tasks: dict[str, tuple[Path, int]] = {}
+    for file in _pipeline_files(project):
+        try:
+            text = file.read_text(encoding="utf-8")
+            value = json.loads(_strip_jsonc(text))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(value, dict):
+            continue
+        for name, line in _top_level_key_lines(text):
+            if name in value and not name.startswith("$"):
+                tasks[name] = (file, line)
+    return [(name, *tasks[name]) for name in sorted(tasks, key=str.casefold)]
+
+
+def _display_path(file: Path, project: Path) -> Path:
+    try:
+        return file.relative_to(project)
+    except ValueError:
+        return file
+
+
 class _MaaFrameworkSelectCommand(sublime_plugin.WindowCommand):
     config_key = ""
     interface_field = ""
@@ -266,6 +420,31 @@ class MaaFrameworkSelectLocaleCommand(_MaaFrameworkSelectCommand):
     config_key = "__locale"
     interface_field = "languages"
     item_name = "locale"
+
+
+class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):
+    def run(self) -> None:
+        project = _active_project(self.window)
+        if project is None:
+            sublime.status_message(
+                "MaaFramework: open a file in a project before choosing a task"
+            )
+            return
+        self._tasks = _project_tasks(project)
+        if not self._tasks:
+            sublime.status_message("MaaFramework: no tasks found in the active resource")
+            return
+        labels = [
+            f"{name} — {_display_path(file, project)}:{line + 1}"
+            for name, file, line in self._tasks
+        ]
+        self.window.show_quick_panel(labels, self._on_done)
+
+    def _on_done(self, index: int) -> None:
+        if index < 0 or index >= len(self._tasks):
+            return
+        _, file, line = self._tasks[index]
+        self.window.open_file(f"{file}:{line + 1}:1", sublime.ENCODED_POSITION)
 
 
 class MaaFrameworkProjectStatusListener(sublime_plugin.EventListener):
