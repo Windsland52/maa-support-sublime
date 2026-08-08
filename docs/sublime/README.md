@@ -41,6 +41,7 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 ## 自动化
 
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试和安装包构建；
+- CI 解压最终安装包并使用官方 `st-package-reviewer --fail-on-warnings` 审核，warning 或 failure 均阻止合并；
 - 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `LSP-MaaFramework.sublime-package`；
 - 根目录 `repository.json` 使用 schema 3 和显式 GitHub Release 下载地址，兼容 Package Control 3.4.1，允许用户在正式收录前通过 `Add Repository` 安装；
 - Package Control 默认 channel 条目需在首个 Release 建立后另行提交。

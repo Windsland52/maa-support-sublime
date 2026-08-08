@@ -23,6 +23,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm release:sublime
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - run: python -m pip install st-package-reviewer
+      - name: Review Sublime package
+        run: |
+          mkdir -p build/package-review
+          python -m zipfile -e release/LSP-MaaFramework.sublime-package build/package-review
+          python -m st_package_reviewer --fail-on-warnings build/package-review
       - name: Publish release asset
         env:
           GH_TOKEN: ${{ github.token }}

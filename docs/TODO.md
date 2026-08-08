@@ -22,7 +22,7 @@
 - [x] 使用 `lsp_utils` 管理 Node runtime
 - [x] 添加设置入口和设置 schema
 - [x] 仅在 Maa 项目中启动 LSP
-- [ ] 完成 Package Control reviewer 检查
+- [x] 完成 Package Control reviewer 检查
 - [ ] 提交 Package Control 默认 channel
 
 ## 配置正确性
