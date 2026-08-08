@@ -9,6 +9,7 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 3. **Node.js 20.19.0 或更高版本** — `node` 默认需在系统 PATH 中
 
 用户不需要安装 pnpm，也不需要单独构建 maa-lsp。
+发布包通过 `.python-version` 使用 Sublime Python 3.8 插件宿主，与当前 LSP 包保持一致。
 
 ## 用户安装
 

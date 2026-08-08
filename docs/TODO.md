@@ -16,6 +16,8 @@
 - [x] 确定公开 GitHub URL，并提供 Package Control 自定义 repository 配置
 - [x] 创建首个语义版本 Release（`v0.1.0`）
 - [x] 自定义 repository 兼容 Package Control 3.4.1
+- [x] 声明 Sublime Python 3.8 插件宿主，确保 MaaLSP 可以导入新版 LSP
+- [x] 发布 Python 宿主兼容性修复版本（`v0.1.1`）
 - [ ] 提交 Package Control 默认 channel
 
 ## MVP 之后

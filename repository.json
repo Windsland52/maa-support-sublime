@@ -10,9 +10,9 @@
       "labels": ["linting", "text navigation"],
       "releases": [
         {
-          "version": "0.1.0",
-          "url": "https://github.com/Windsland52/maa-support-sublime/releases/download/v0.1.0/MaaLSP.sublime-package",
-          "date": "2026-08-08 09:49:05",
+          "version": "0.1.1",
+          "url": "https://github.com/Windsland52/maa-support-sublime/releases/download/v0.1.1/MaaLSP.sublime-package",
+          "date": "2026-08-08 19:11:04",
           "sublime_text": ">=4000",
           "platforms": ["*"]
         }

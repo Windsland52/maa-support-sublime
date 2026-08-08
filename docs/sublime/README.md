@@ -6,13 +6,14 @@
 
 `pnpm package:sublime` 生成 `release/MaaLSP.sublime-package`。它是 ZIP 格式，包含：
 
+- `.python-version`，固定为 `3.8`，确保插件与新版 LSP 运行在相同的 Sublime Python 宿主；
 - `plugin.py`
 - `MaaLSP.sublime-settings`
 - `dependencies.json`
 - 独立的 `server.mjs`
 - README、LICENSE、第三方声明
 
-构建脚本会拒绝仍含第三方裸 import 的 `server.mjs`，并在写包后校验所有必需条目。
+构建脚本会拒绝非 `3.8` 的插件宿主声明和仍含第三方裸 import 的 `server.mjs`，并在写包后校验所有必需条目。缺少 `.python-version` 时，Sublime 会回退到 Python 3.3，导致插件无法导入运行于 Python 3.8 的新版 LSP。
 
 ## 运行方式
 

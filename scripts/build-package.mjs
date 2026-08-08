@@ -8,6 +8,7 @@ const destination = path.join(root, 'release', 'MaaLSP.sublime-package')
 const serverSource = path.join(root, 'pkgs', 'maa-lsp', 'dist', 'server.mjs')
 
 const files = [
+  ['.python-version', path.join(root, 'pkgs', 'sublime', '.python-version')],
   ['plugin.py', path.join(root, 'pkgs', 'sublime', 'plugin.py')],
   ['MaaLSP.sublime-settings', path.join(root, 'pkgs', 'sublime', 'MaaLSP.sublime-settings')],
   ['dependencies.json', path.join(root, 'pkgs', 'sublime', 'dependencies.json')],
@@ -16,6 +17,15 @@ const files = [
   ['THIRD_PARTY_NOTICES.md', path.join(root, 'pkgs', 'sublime', 'THIRD_PARTY_NOTICES.md')],
   ['server.mjs', serverSource]
 ]
+
+const pythonVersion = (
+  await readFile(path.join(root, 'pkgs', 'sublime', '.python-version'), 'utf8')
+).trim()
+if (pythonVersion !== '3.8') {
+  throw new Error(
+    `MaaLSP must use the Python 3.8 plugin host, found ${pythonVersion || 'no version'}`
+  )
+}
 
 const server = await readFile(serverSource, 'utf8')
 const externalImports = [...server.matchAll(/^import .*? from ["']([^"']+)["'];?$/gm)]

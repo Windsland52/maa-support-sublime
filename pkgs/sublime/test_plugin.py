@@ -73,6 +73,10 @@ class PluginTests(unittest.TestCase):
         target = self.plugin.MaaLspPlugin._extract_packaged_server()
         self.assertEqual(target.read_bytes(), b"second")
 
+    def test_selects_python_38_plugin_host(self):
+        version = Path(__file__).with_name(".python-version").read_text(encoding="utf-8").strip()
+        self.assertEqual(version, "3.8")
+
 
 if __name__ == "__main__":
     unittest.main()
