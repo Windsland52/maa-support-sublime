@@ -352,3 +352,74 @@ test('applies custom recognition and action parsers from maatools.config.mts', a
     await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 })
+
+test('applies diagnostic severity and ignore overrides from maatools.config.mts', async () => {
+  const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-check-'))
+  let client
+  try {
+    const server = path.join(temp, 'server.mjs')
+    await copyFile(builtServer, server)
+    const workspace = path.join(temp, 'workspace')
+    const pipelineDir = path.join(workspace, 'resource', 'pipeline')
+    await mkdir(pipelineDir, { recursive: true })
+    await writeFile(
+      path.join(workspace, 'interface.json'),
+      JSON.stringify({ resource: [{ name: 'Default', path: 'resource' }] })
+    )
+    await writeFile(
+      path.join(workspace, 'maatools.config.mts'),
+      `export default {
+        check: {
+          override: {
+            'unknown-task': 'warning',
+            'dynamic-image': 'ignore'
+          }
+        }
+      }`
+    )
+    await writeFile(
+      path.join(pipelineDir, 'tasks.json'),
+      JSON.stringify(
+        {
+          Entry: {
+            recognition: {
+              type: 'TemplateMatch',
+              param: { template: 'dynamic/template' }
+            },
+            next: ['MissingTask']
+          }
+        },
+        null,
+        2
+      )
+    )
+
+    client = new LspClient(server, temp)
+    await client.request('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(workspace).href,
+      capabilities: {},
+      workspaceFolders: null
+    })
+    client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
+    const published = await client.waitFor(
+      message =>
+        message.method === 'textDocument/publishDiagnostics' &&
+        message.params.diagnostics.some(diagnostic => diagnostic.message.includes('MissingTask'))
+    )
+    assert.deepEqual(published.params.diagnostics, [
+      {
+        severity: 2,
+        range: published.params.diagnostics[0].range,
+        message: '未知任务 MissingTask',
+        source: 'maa'
+      }
+    ])
+
+    await client.shutdown()
+    client = undefined
+  } finally {
+    client?.kill()
+    await rm(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
+})

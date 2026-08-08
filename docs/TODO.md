@@ -29,7 +29,7 @@
 
 - [x] 加载并监听 `maatools.config.mts`
 - [x] 应用 `parser.customReco` / `parser.customAction`
-- [ ] 应用 `check.override`
+- [x] 应用 `check.override`
 - [ ] 热更新 `config/maa_pi_config.json`
 - [ ] 检测 MaaAssistantArknights 模式
 - [ ] 报告配置加载失败

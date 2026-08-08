@@ -321,20 +321,26 @@ async function publishDiagnostics() {
     }
     const diags = performDiagnostic(project.bundle, {})
     for (const diag of diags) {
+      const override = project.config?.check?.override?.[diag.type]
+      if (override === 'ignore') {
+        continue
+      }
+      const effective = override ? { ...diag, level: override } : diag
       const [start, end, brief] = await buildDiagnosticMessage(
         project.root.workspaceRoot as AbsolutePath,
-        diag,
+        effective,
         (file, offset) => resolver.resolve(file, offset),
         {}
       )
-      const list = byFile.get(diag.file) ?? []
+      const list = byFile.get(effective.file) ?? []
       list.push({
-        severity: diag.level === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
+        severity:
+          effective.level === 'warning' ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
         range: Range.create(start[0], start[1], end[0], end[1]),
         message: brief,
         source: 'maa'
       })
-      byFile.set(diag.file, list)
+      byFile.set(effective.file, list)
     }
   }
 

@@ -18,7 +18,9 @@ workspace folder 增删或客户端报告 interface 文件新增/删除时会重
 
 每个 workspace 根目录的 `maatools.config.mts` 通过 `jiti` 独立加载，同一 workspace 内发现的 interface 项目共享该配置。LSP 直接监听配置文件的新增、修改和删除；变更后重建对应项目。
 
-`parser.customReco` 和 `parser.customAction` 会传给每个 `InterfaceBundle`，因此自定义识别与动作参数里的任务、锚点、模板引用能参与跳转、悬浮和诊断。诊断覆盖在后续处理阶段消费。
+`parser.customReco` 和 `parser.customAction` 会传给每个 `InterfaceBundle`，因此自定义识别与动作参数里的任务、锚点、模板引用能参与跳转、悬浮和诊断。
+
+`check.override` 以 manager 的诊断类型（例如 `unknown-task`、`dynamic-image`）为键，可将其覆盖成 `error`、`warning` 或 `ignore`。覆盖同时应用于初次扫描和配置热更新后的扫描。
 
 ## 资源选择
 
