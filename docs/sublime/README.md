@@ -9,6 +9,8 @@
 - `.python-version`，固定为 `3.8`，确保插件与新版 LSP 运行在相同的 Sublime Python 宿主；
 - `plugin.py`
 - `LSP-MaaFramework.sublime-settings`
+- `Default.sublime-commands`
+- `sublime-package.json` 设置 schema
 - `dependencies.json`
 - 独立的 `server.mjs`
 - README、LICENSE、第三方声明
@@ -27,6 +29,8 @@
 因此 GitHub Release、Package Control 和开发符号链接共用一份插件实现。
 
 Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先复用 PATH 中满足版本的 Node；找不到时由 `lsp_utils` 提供隔离下载，不修改系统 Node。
+
+`Preferences: LSP-MaaFramework Settings` 打开用户覆盖设置；`sublime-package.json` 同时为包设置和 `.sublime-project` 中的 `settings.LSP.LSP-MaaFramework` 提供 schema。
 
 ## 包名迁移
 

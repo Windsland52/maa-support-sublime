@@ -52,6 +52,8 @@ New-Item -ItemType SymbolicLink -Path $dest -Target "C:\github\maa-support-subli
 
 ## 配置
 
+执行 `Preferences: LSP-MaaFramework Settings` 打开用户设置。项目级覆盖可写在 `.sublime-project` 的 `settings.LSP.LSP-MaaFramework` 中，两处均提供设置 schema。
+
 发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，在 `LSP-MaaFramework.sublime-settings` 的 User 设置中指定：
 
 ```json

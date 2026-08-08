@@ -20,7 +20,7 @@
 - [x] 发布 Python 宿主兼容性修复版本（`v0.1.1`）
 - [x] 将公开包重命名为符合 helper 约定的 `LSP-MaaFramework`
 - [x] 使用 `lsp_utils` 管理 Node runtime
-- [ ] 添加设置入口和设置 schema
+- [x] 添加设置入口和设置 schema
 - [ ] 仅在 Maa 项目中启动 LSP
 - [ ] 完成 Package Control reviewer 检查
 - [ ] 提交 Package Control 默认 channel
