@@ -40,7 +40,7 @@ Additional command-palette tools cover task navigation/evaluation, runtime statu
 
 Run `Preferences: LSP-MaaFramework Settings` to edit user settings. Project-specific overrides belong under `settings.LSP.LSP-MaaFramework` in a `.sublime-project` file. Both locations use the package's settings schema. The server launcher, native runtime, MaaLogAnalyzer, and package commands all use LSP's resolved configuration, so project overrides take effect consistently.
 
-The bundled `server.mjs` is used by installed packages. Development checkouts fall back to the adjacent `maa-lsp/dist/server.mjs`; `server_path` can explicitly select another standalone server.
+The bundled `server.mjs` is used by installed packages. Development checkouts fall back to the adjacent `maa-lsp/dist/server.mjs`. To select another standalone server, customize `server_path` and leave the managed `command` setting unchanged.
 
 ## Optional key bindings
 
@@ -108,7 +108,7 @@ New-Item -ItemType SymbolicLink -Path $dest -Target "C:\github\maa-support-subli
 
 执行 `Preferences: LSP-MaaFramework Settings` 打开用户设置。项目级覆盖可写在 `.sublime-project` 的 `settings.LSP.LSP-MaaFramework` 中，两处均提供设置 schema。server 启动、native runtime、MaaLogAnalyzer 与包命令统一使用 LSP 合并后的有效配置，因此项目级覆盖会一致生效。
 
-发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，在 `LSP-MaaFramework.sublime-settings` 的 User 设置中指定：
+发布包会优先使用内置 `server.mjs`；开发目录会回退到相邻 `maa-lsp/dist/server.mjs`。如需覆盖，应修改 `server_path` 并保持插件管理的 `command` 不变。在 `LSP-MaaFramework.sublime-settings` 的 User 设置中指定：
 
 ```json
 {

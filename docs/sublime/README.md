@@ -25,7 +25,7 @@
 
 插件按以下优先级解析 LSP server：
 
-1. 用户配置的 `server_path`；
+1. 用户配置的 `server_path`；默认设置文件将它放在首项，并用与 schema 一致的注释明确要求用户修改该项而不是插件管理的 `command`；
 2. 解包目录内的 `server.mjs`；
 3. 开发仓库相邻的 `maa-lsp/dist/server.mjs`；
 4. 从 `.sublime-package` 读取并写入 Sublime cache 的 `server.mjs`。

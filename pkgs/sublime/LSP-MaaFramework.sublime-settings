@@ -1,14 +1,33 @@
 {
+  // Absolute path to a custom maa-lsp server. Customize this setting instead of `command`; use `auto` to run the server bundled with this package.
+  "server_path": "auto",
+
+  // Managed LSP launch command. Leave this unchanged; customize `server_path` above.
   "command": ["${node_bin}", "${server_path}", "--stdio"],
   "selector": "source.json",
   "schemes": ["file"],
-  "server_path": "auto",
+
+  // Semantic version of `@maaxyz/maa-node` installed into this package's managed storage for task execution.
   "maa_version": "5.12.2",
+
+  // Version of the official `@windsland52/maa-log-tools` package installed into this package's managed storage for MaaLogAnalyzer runtime inspection.
   "maa_log_tools_version": "1.3.0",
+
+  // npm registry used to install the selected MaaFramework native runtime and optional MaaLogAnalyzer tools.
   "npm_registry": "https://registry.npmjs.org",
+
+  // Require an elevated Sublime Text process before starting the MaaFramework worker on Windows.
   "admin_mode": false,
+
+  // Enable MaaFramework native debug logging for runtime sessions.
   "debug_mode": true,
+
+  // Ask MaaFramework to save recognition drawing output in the project debug directory.
   "save_draw": false,
+
+  // Milliseconds to wait for each MaaFramework Agent client to connect.
   "agent_timeout": 30000,
+
+  // Per-project pipeline task breakpoints managed by the control panel.
   "break_tasks": {}
 }

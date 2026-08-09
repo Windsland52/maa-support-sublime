@@ -9,6 +9,10 @@ async function readJson(relative) {
 test('Sublime package exposes a settings command and settings schema', async () => {
   const commands = await readJson('../pkgs/sublime/Default.sublime-commands')
   const metadata = await readJson('../pkgs/sublime/sublime-package.json')
+  const settingsSource = await readFile(
+    new URL('../pkgs/sublime/LSP-MaaFramework.sublime-settings', import.meta.url),
+    'utf8'
+  )
 
   assert.ok(
     commands.some(
@@ -22,6 +26,15 @@ test('Sublime package exposes a settings command and settings schema', async () 
   const [packageSettings, projectSettings] = metadata.contributions.settings
   assert.deepEqual(packageSettings.file_patterns, ['/LSP-MaaFramework.sublime-settings'])
   assert.equal(packageSettings.schema.$id, 'sublime://settings/LSP-MaaFramework')
+  const pluginProperties = packageSettings.schema.definitions.PluginConfig.properties
+  assert.ok(settingsSource.indexOf('"server_path"') < settingsSource.indexOf('"command"'))
+  assert.match(settingsSource, /Leave this unchanged; customize `server_path` above\./)
+  for (const [name, property] of Object.entries(pluginProperties)) {
+    assert.ok(
+      settingsSource.includes(`// ${property.markdownDescription}`),
+      `${name} should have a comment matching its schema description`
+    )
+  }
   assert.equal(
     projectSettings.schema.properties.settings.properties.LSP.properties['LSP-MaaFramework'].$ref,
     'sublime://settings/LSP-MaaFramework#/definitions/PluginConfig'
