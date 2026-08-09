@@ -208,6 +208,14 @@ class FakeHtmlSheet:
         self.content = content
 
 
+class FakeQuickPanelItem:
+    def __init__(self, trigger, details="", annotation="", kind=None):
+        self.trigger = trigger
+        self.details = details
+        self.annotation = annotation
+        self.kind = kind
+
+
 class FakeWindow:
     next_id = 1
 
@@ -266,6 +274,7 @@ class FakeSublime(types.ModuleType):
         self.server = b"first"
         self.messages = []
         self.clipboard = None
+        self.QuickPanelItem = FakeQuickPanelItem
 
     def load_settings(self, _name):
         return self.settings
@@ -611,11 +620,12 @@ class PluginTests(unittest.TestCase):
 
         pipeline_label = str(Path("resource", "pipeline", "main.jsonc"))
         self.assertEqual(
-            window.labels,
-            [
-                f"Alpha — {pipeline_label}:4",
-                f"Beta — {pipeline_label}:9",
-            ],
+            [item.trigger for item in window.labels],
+            ["Alpha", "Beta"],
+        )
+        self.assertEqual(
+            [item.annotation for item in window.labels],
+            [f"{pipeline_label}:4", f"{pipeline_label}:9"],
         )
         window.on_done(1)
         self.assertEqual(

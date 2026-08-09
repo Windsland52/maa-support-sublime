@@ -46,7 +46,7 @@ maa-lsp 的图片 Hover 同时返回可点击的本地文件链接和 Markdown �
 
 打开 MaaFramework 项目内的文件时，状态栏显示 interface 的项目名和当前生效的 resource；已配置的 controller 与 locale 也会同时展示。切换文件、保存文件或执行上述选择命令后状态自动刷新，普通 JSON 文件不会残留 Maa 状态。
 
-`MaaFramework: Goto Task` 从当前文件所属项目的有效 resource path 中读取 `pipeline/**/*.{json,jsonc}` 和 `default_pipeline.json`。quick panel 按任务名排序并显示来源文件与行号；同名任务按 resource path 后层覆盖前层的顺序定位，`$` 开头的内部任务不显示。选择后以 encoded position 打开声明行。
+`MaaFramework: Goto Task` 从当前文件所属项目的有效 resource path 中读取 `pipeline/**/*.{json,jsonc}` 和 `default_pipeline.json`。quick panel 按任务名排序，以任务名作为唯一的模糊匹配主文本，并在右侧 annotation 显示来源文件与行号，避免搜索词命中文件名时压过精确节点名；同名任务按 resource path 后层覆盖前层的顺序定位，`$` 开头的内部任务不显示。选择后以 encoded position 打开声明行。
 
 `MaaFramework: Evaluate Task` 选择任务后向当前 maa-lsp 会话发送 `maa/evaluateTask` 请求。server 使用已加载、已应用 resource layering 的 `InterfaceBundle.evalTask` 求值，并把合并后的 MaaFramework task 作为只读临时 JSON 展示。MaaAssistantArknights 的 task expression 求值不属于本插件范围，因此不注册相关命令或协议。
 

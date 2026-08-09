@@ -63,6 +63,7 @@
 - [x] 在 controller/resource/locale 列表中标记当前选择
 - [x] 活动项目和资源状态
 - [x] Goto Task
+- [x] Goto Task 搜索按节点名而不是文件名评分
 - [x] task 求值；~~expression 求值~~（仅 MaaAssistantArknights 使用，不在本插件范围）
 - [x] 手动重载项目和配置
 - [x] 运行环境检查

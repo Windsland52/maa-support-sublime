@@ -1939,7 +1939,10 @@ class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):
             sublime.status_message("MaaFramework: no tasks found in the active resource")
             return
         labels = [
-            f"{name} — {_display_path(file, project)}:{line + 1}"
+            sublime.QuickPanelItem(
+                name,
+                annotation=f"{_display_path(file, project)}:{line + 1}",
+            )
             for name, file, line in self._tasks
         ]
         self.window.show_quick_panel(labels, self._on_done)
