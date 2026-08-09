@@ -1008,6 +1008,27 @@ def _project_interface(project: Path) -> dict[str, Any]:
     return (_load_json_object(interface_file) if interface_file else None) or {}
 
 
+def _project_interface_tasks(project: Path) -> list[dict[str, Any]]:
+    interface = _project_interface(project)
+    sources = [interface]
+    imports = interface.get("import")
+    if isinstance(imports, list):
+        for relative in imports:
+            if not isinstance(relative, str):
+                continue
+            imported = _load_json_object(project / relative)
+            if imported is not None:
+                sources.append(imported)
+    return [
+        task
+        for source in sources
+        for task in (source.get("task") if isinstance(source.get("task"), list) else [])
+        if isinstance(task, dict)
+        and isinstance(task.get("name"), str)
+        and isinstance(task.get("entry"), str)
+    ]
+
+
 def _project_config(project: Path) -> Optional[dict[str, Any]]:
     config_file = project / "config" / "maa_pi_config.json"
     return _load_json_object(config_file) if config_file.is_file() else {}
@@ -1849,16 +1870,7 @@ class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):
         if self._project is None:
             sublime.status_message("MaaFramework: no active project")
             return
-        entries = _project_interface(self._project).get("task")
-        if not isinstance(entries, list):
-            entries = []
-        self._tasks = [
-            entry
-            for entry in entries
-            if isinstance(entry, dict)
-            and isinstance(entry.get("name"), str)
-            and isinstance(entry.get("entry"), str)
-        ]
+        self._tasks = _project_interface_tasks(self._project)
         if not self._tasks:
             sublime.status_message("MaaFramework: no interface tasks found")
             return

@@ -714,11 +714,23 @@ class PluginTests(unittest.TestCase):
         pipeline = project / "resource" / "pipeline" / "main.json"
         pipeline.parent.mkdir(parents=True)
         pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        imported_tasks = project / "tasks" / "Daily.jsonc"
+        imported_tasks.parent.mkdir()
+        imported_tasks.write_text(
+            """
+            {
+                // MaaFramework projects commonly keep tasks in imported files.
+                "task": [{ "name": "Daily", "entry": "Entry" },],
+            }
+            """,
+            encoding="utf-8",
+        )
         (project / "interface.json").write_text(
             """
             {
                 "resource": [{ "name": "Default", "path": "resource" }],
-                "task": [{ "name": "Daily", "entry": "Entry" }]
+                "task": [],
+                "import": ["tasks/Daily.jsonc"]
             }
             """,
             encoding="utf-8",

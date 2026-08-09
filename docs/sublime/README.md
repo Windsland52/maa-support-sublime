@@ -58,7 +58,7 @@ maa-lsp 的 Code Lens 使用 `codeLens/resolve` 按可见范围延迟解析。Su
 
 ## 控制面板与任务队列
 
-`MaaFramework: Control Panel` 展示活动项目的持久化任务队列。`Add Task to Queue…` 从 interface 的 `task` 定义中选择，并向 `config/maa_pi_config.json.task` 追加带稳定 `__key` 的队列项；`Remove Task from Queue…` 删除指定实例。队列允许重复任务并保留现有任务的 `option` 等字段。选择已有队列项会跳转到它的 pipeline entry 声明。
+`MaaFramework: Control Panel` 展示活动项目的持久化任务队列。`Add Task to Queue…` 按 `maa-support-extension` 的 interface 合并方式，从根 interface 及其直接 `import` 文件的 `task` 定义中选择，并向 `config/maa_pi_config.json.task` 追加带稳定 `__key` 的队列项；`Remove Task from Queue…` 删除指定实例。interface 和 import 均支持 JSONC。队列允许重复任务并保留现有任务的 `option` 等字段。选择已有队列项会跳转到它的 pipeline entry 声明。
 
 `Start Queue` 首次运行时通过 `lsp_utils` 的 Node/npm 将设置中的 `@maaxyz/maa-node` 版本安装到 `LspMaaFrameworkPlugin.plugin_storage_path`（Sublime 的 `Package Storage/LSP-MaaFramework`），然后启动独立 `runtime.mjs` worker。内置 server/runtime 解压与 MaaLogAnalyzer tools 也使用该路径，不再根据硬编码包名拼接 `sublime.cache_path()`。worker 用 pipeline manager 把当前 controller/resource/task 配置构造成 MaaFramework runtime，依次执行队列。后续启动复用已校验的本地 native 包。
 
