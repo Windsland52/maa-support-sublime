@@ -55,7 +55,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Workspace Symbol（跨项目任务名搜索）
 - Code Lens（任务引用数与活动资源状态；按可见范围延迟解析，任务引用数可点击打开引用列表）
 - Inlay Hint（任务文档与当前 locale 文本）
-- Code Action（任务 v1/v2 语法互转与图片路径 quick-fix）
+- Code Action（图片路径 quick-fix；不提供会重写整个任务、改变字段顺序并丢失 JSONC 注释的 v1/v2 自动转换）
 - Document Link（interface 路径、模板图片与本地文档）
 - Document Color（RGB/HSV 颜色预览与回写）
 - Formatting（保留 JSONC 注释与尾逗号）

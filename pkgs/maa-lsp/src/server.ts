@@ -1186,7 +1186,7 @@ connection.onInitialize(params => {
       },
       codeLensProvider: { resolveProvider: true },
       codeActionProvider: {
-        codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
+        codeActionKinds: [CodeActionKind.QuickFix]
       },
       colorProvider: true,
       definitionProvider: true,
@@ -1575,41 +1575,7 @@ connection.onCodeAction(async params => {
   if (!layerInfo) {
     return null
   }
-  const [layer, fileName] = layerInfo
   const actions: CodeAction[] = []
-  const decl = findDeclRef(
-    layer.mergedDecls.filter(candidate => candidate.file === fileName),
-    ctx.offset
-  )
-  if (decl?.type === 'task.decl') {
-    const info = layer.tasks[decl.task]?.find(candidate => candidate.file === fileName)
-    const content = info ? await loader.get(info.file) : null
-    if (info && content !== null) {
-      const starts = computeLineStarts(content)
-      const line = lineOfStarts(starts, info.prop.offset)
-      const indent = content.slice(starts[line], info.prop.offset)
-      const range = (
-        await toLocation(
-          info.file,
-          info.prop.offset,
-          info.data.offset + info.data.length - info.prop.offset
-        )
-      ).range
-      for (const version of [1, 2] as const) {
-        actions.push({
-          title: `Convert task to v${version} syntax`,
-          kind: CodeActionKind.RefactorRewrite,
-          edit: {
-            changes: {
-              [params.textDocument.uri]: [
-                TextEdit.replace(range, layer.toggleMode(version, info, indent))
-              ]
-            }
-          }
-        })
-      }
-    }
-  }
 
   const content = await loader.get(ctx.file)
   if (content !== null) {

@@ -46,6 +46,7 @@
 - [x] 修复 Sublime 过滤空命令导致 Code Lens 不显示
 - [x] Inlay Hint
 - [x] Code Action
+- [x] 移除会重写任务并丢失 JSONC 的 v1/v2 转换
 - [x] Document Link
 - [x] Document Color
 - [x] 完整 Hover

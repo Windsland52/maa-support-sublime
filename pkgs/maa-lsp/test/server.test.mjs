@@ -196,8 +196,7 @@ test('standalone server discovers recursive projects in every workspace', async 
       commands: ['editor.action.showReferences']
     })
     assert.deepEqual(initialized.result.capabilities.codeActionProvider.codeActionKinds, [
-      'quickfix',
-      'refactor.rewrite'
+      'quickfix'
     ])
     assert.equal(initialized.result.capabilities.colorProvider, true)
 
@@ -998,15 +997,7 @@ test('completes pipeline tasks and interface references', async () => {
       range: { start: taskPosition, end: taskPosition },
       context: { diagnostics: [] }
     })
-    assert.deepEqual(
-      taskActions.result.map(action => action.title),
-      ['Convert task to v1 syntax', 'Convert task to v2 syntax']
-    )
-    assert.ok(
-      taskActions.result.every(
-        action => action.edit.changes[pathToFileURL(pipelineFile).href].length === 1
-      )
-    )
+    assert.deepEqual(taskActions.result, [])
 
     const imageDiagnostics = await client.waitFor(
       message =>
