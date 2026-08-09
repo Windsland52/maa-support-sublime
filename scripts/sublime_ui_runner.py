@@ -79,6 +79,9 @@ def _check_environment(window, view, checks: dict[str, object]) -> None:
 
 def _check_sheets(window, view, control_created: bool) -> None:
     try:
+        plugin = sys.modules.get("LSP-MaaFramework.plugin")
+        control_html = plugin._control_panel_html(window) if plugin is not None else ""
+        window.run_command("maa_framework_browser_panel_action", {"action": "refresh"})
         html_sheet_count = sum(isinstance(sheet, sublime.HtmlSheet) for sheet in window.sheets())
         checks: dict[str, object] = {
             "python_38_host": sys.version_info[:2] == (3, 8),
@@ -88,6 +91,19 @@ def _check_sheets(window, view, control_created: bool) -> None:
             "maa_project_setting": view.settings().get("maa_framework_project") is True,
             "maa_project_status": bool(view.get_status("maa_framework_project")),
             "control_html_sheet": control_created,
+            "control_panel_grouped_actions": (
+                ".action { display: block;" in control_html
+                and "Queue" in control_html
+                and "Capture and Recognition" in control_html
+            ),
+            "control_panel_action_url": (
+                "subl:maa_framework_browser_panel_action" in control_html
+                and "&amp;quot;" not in control_html
+            ),
+            "control_panel_action_dispatched": bool(
+                plugin is not None
+                and plugin._control_notices.get(window.id()) == "Panel refreshed."
+            ),
             "log_analysis_html_sheet": html_sheet_count >= 2,
             "hover_image_preview": _hover_image_renders(view),
             "code_lens_rendered": _code_lens_renders(view),

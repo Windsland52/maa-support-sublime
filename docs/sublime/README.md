@@ -91,7 +91,9 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 ## 浏览器执行面板
 
-`Open Browser Execution Panel` 创建 Sublime Text 4 minihtml sheet，显示 worker 状态与最近 50 条 IPC event。Start/Pause/Continue/Stop、状态 JSON、最新 native detail 和 Refresh 均使用 Sublime 原生 `subl:` command URL 回到 WindowCommand，再进入逐行 JSON worker IPC。面板不启动 localhost server、不执行任意 JavaScript，也不向外部浏览器暴露控制端口；runtime event 到达时自动刷新已打开的 sheet。
+`Open Browser Execution Panel` 创建 Sublime Text 4 minihtml sheet，显示当前项目、任务队列、worker 状态与最近 50 条 IPC event。操作按 Queue、Runtime、Capture and Recognition、Logs 分组为单列链接，避免 minihtml 在窄 sheet 中换行时发生重叠。所有链接通过一个白名单 `subl:` WindowCommand 分发；队列为空、runtime 未启动或识别测试时机不正确时，原因直接显示在 sheet 中。添加/删除任务、runtime 状态变化及手动 Refresh 都会更新已打开的面板。
+
+面板不启动 localhost server、不执行任意 JavaScript，也不向外部浏览器暴露控制端口。Start/Pause/Continue/Stop 和其他可用操作最终仍进入逐行 JSON worker IPC。
 
 ## 截图与裁剪
 

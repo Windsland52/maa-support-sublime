@@ -160,7 +160,7 @@ interface Agent 由 worker 作为子进程启动并绑定 native Client；输出
 
 插件默认不启用任何快捷键，避免覆盖用户或其他包的绑定。`Default.sublime-keymap` 提供了已注释的 `Ctrl+Alt+Shift+F5/F6/F7/F8` 示例；用户把需要的条目复制到 `Preferences: Key Bindings` 后，先执行 `Activate Global Shortcut Target`，即可从任意 Sublime window 启动、切换暂停、停止或截图。
 
-`Open Browser Execution Panel` 使用内置 minihtml sheet 显示实时 IPC event，并通过安全的 `subl:` command URL 控制 worker；不开放 localhost 控制端口。
+`Open Browser Execution Panel` 使用内置 minihtml sheet 显示当前项目、队列、runtime 状态和实时 IPC event。操作以单列分组显示，并通过白名单 `subl:` command URL 控制 worker；无法执行时会在面板内显示原因，不开放 localhost 控制端口。
 
 `Analyze Logs` 提供无需外部依赖的日志级别和 Maa event 汇总。`MaaLogAnalyzer…` 可按需安装官方 `@windsland52/maa-log-tools` 到 Sublime cache 并生成 runtime-inspection JSON，或打开 [MaaLogAnalyzer Web](https://mla.maafw.com)；打开网页时会复制当前项目 `debug/` 路径，但不会自动上传本地文件。
 

@@ -138,9 +138,14 @@ class MaaRuntimeManager:
         self.latest_action = None
         self.project = None
 
+    def is_running(self) -> bool:
+        return self.process is not None and self.process.poll() is None
+
     def start(self, project: Path, window) -> None:
         self.window = window
         self.project = project
+        self.state = "starting"
+        sublime.set_timeout(_refresh_control_sheets)
         try:
             settings = _settings_for_window(window)
             if settings.get("admin_mode", False) and os.name == "nt" and not _is_admin():
@@ -170,9 +175,10 @@ class MaaRuntimeManager:
         except Exception as error:
             self.state = "failed"
             sublime.status_message(f"MaaFramework: cannot start runtime: {error}")
+            sublime.set_timeout(_refresh_control_sheets)
 
     def control(self, method: str) -> None:
-        if not self.process or self.process.poll() is not None:
+        if not self.is_running():
             sublime.status_message("MaaFramework: runtime is not running")
             return
         self.request(method, {}, lambda _result: None)
@@ -491,6 +497,7 @@ class MaaRuntimeManager:
         self.state = "running"
         tasks = result.get("tasks", []) if isinstance(result, dict) else []
         sublime.status_message(f"MaaFramework: started {len(tasks)} queued task(s)")
+        _refresh_control_sheets()
 
     def _event(self, event: str, params: Any) -> None:
         self.history.append({"event": event, "params": params})
@@ -513,6 +520,7 @@ class MaaRuntimeManager:
     def _runtime_error(self, error: Any) -> None:
         self.state = "failed"
         sublime.status_message(f"MaaFramework runtime: {error}")
+        _refresh_control_sheets()
 
     def _ended(self) -> None:
         if self.state not in {"finished", "stopped"}:
@@ -520,6 +528,7 @@ class MaaRuntimeManager:
             sublime.status_message("MaaFramework: runtime process exited")
         self.process = None
         self._callbacks.clear()
+        _refresh_control_sheets()
 
 
 _runtime_manager = MaaRuntimeManager()
@@ -670,45 +679,161 @@ class MaaShortcutController:
 
 _shortcut_controller = MaaShortcutController()
 _control_sheets = {}
+_control_notices = {}
 _log_sheets = {}
 
 
-def _control_panel_html() -> str:
-    buttons = [
-        ("Start", "maa_framework_start"),
-        ("Pause", "maa_framework_pause"),
-        ("Continue", "maa_framework_continue"),
-        ("Stop", "maa_framework_stop"),
-        ("Status JSON", "maa_framework_runtime_status"),
-        ("Latest Detail", "maa_framework_runtime_detail"),
-        ("Screenshot", "maa_framework_screenshot"),
-        ("Crop", "maa_framework_crop_screenshot"),
-        ("OCR Test", "maa_framework_test_ocr"),
-        ("Template Match", "maa_framework_test_template_match"),
-        ("Pipeline Recognition", "maa_framework_test_pipeline_recognition"),
-        ("Analyze Logs", "maa_framework_analyze_logs"),
-        ("MaaLogAnalyzer", "maa_framework_maa_log_analyzer"),
-        ("Refresh", "maa_framework_browser_panel_refresh"),
-    ]
-    controls = " ".join(
-        f'<a class="button" href="{sublime.command_url(command)}">{label}</a>'
-        for label, command in buttons
+_CONTROL_PANEL_GROUPS = [
+    (
+        "Queue",
+        [
+            ("add-task", "Add Task", "maa_framework_add_task"),
+            ("remove-task", "Remove Task", "maa_framework_remove_task"),
+            ("start", "Start Queue", "maa_framework_start"),
+        ],
+    ),
+    (
+        "Runtime",
+        [
+            ("pause", "Pause", "maa_framework_pause"),
+            ("continue", "Continue", "maa_framework_continue"),
+            ("stop", "Stop", "maa_framework_stop"),
+            ("status", "Status JSON", "maa_framework_runtime_status"),
+            ("detail", "Latest Detail", "maa_framework_runtime_detail"),
+        ],
+    ),
+    (
+        "Capture and Recognition",
+        [
+            ("screenshot", "Screenshot", "maa_framework_screenshot"),
+            ("crop", "Crop Screenshot", "maa_framework_crop_screenshot"),
+            ("ocr", "OCR Test", "maa_framework_test_ocr"),
+            ("template", "Template Match", "maa_framework_test_template_match"),
+            (
+                "pipeline",
+                "Pipeline Recognition",
+                "maa_framework_test_pipeline_recognition",
+            ),
+        ],
+    ),
+    (
+        "Logs",
+        [
+            ("logs", "Analyze Logs", "maa_framework_analyze_logs"),
+            ("mla", "MaaLogAnalyzer", "maa_framework_maa_log_analyzer"),
+        ],
+    ),
+    ("Panel", [("refresh", "Refresh", "maa_framework_browser_panel_refresh")]),
+]
+_CONTROL_PANEL_ACTIONS = {
+    action: (label, command)
+    for _group, entries in _CONTROL_PANEL_GROUPS
+    for action, label, command in entries
+}
+_RUNTIME_SESSION_ACTIONS = {
+    "pause",
+    "continue",
+    "stop",
+    "detail",
+    "screenshot",
+    "crop",
+    "ocr",
+    "template",
+    "pipeline",
+}
+
+
+def _control_panel_block_reason(window, action: str) -> Optional[str]:
+    project = _active_project(window)
+    if action in {"add-task", "remove-task", "start", "logs", "mla", "pipeline"}:
+        if project is None:
+            return "No active MaaFramework project."
+    if action == "add-task" and project is not None and not _project_interface_tasks(project):
+        return "No interface tasks are available for this project."
+    if action in {"remove-task", "start"} and project is not None:
+        config = _project_config(project)
+        if config is None:
+            return "The project configuration cannot be read."
+        queue = config.get("task")
+        if not isinstance(queue, list) or not queue:
+            return "The task queue is empty. Add a task before starting the runtime."
+    if action == "start" and _runtime_manager.state in {"starting", "running", "paused"}:
+        return f"The runtime is already {_runtime_manager.state}."
+    if action in _RUNTIME_SESSION_ACTIONS:
+        if not _runtime_manager.is_running() or _runtime_manager.state not in {
+            "running",
+            "paused",
+            "finished",
+            "stopped",
+        }:
+            return "The runtime is not ready. Add a queue task and start it first."
+    if action == "pause" and _runtime_manager.state != "running":
+        return f"Pause is unavailable while the runtime is {_runtime_manager.state}."
+    if action == "continue" and _runtime_manager.state != "paused":
+        return f"Continue is unavailable while the runtime is {_runtime_manager.state}."
+    if action in {"ocr", "template", "pipeline"} and _runtime_manager.state not in {
+        "finished",
+        "stopped",
+    }:
+        return "Recognition tests are available after the task queue finishes or stops."
+    if action == "detail" and _runtime_manager.latest_recognition is None:
+        if _runtime_manager.latest_action is None:
+            return "No recognition or action detail is available yet."
+    if action == "logs" and project is not None and not _maa_log_files(project):
+        return "No log files were found under the project debug directory."
+    return None
+
+
+def _control_panel_summary(window) -> tuple[str, str]:
+    project = _active_project(window)
+    if project is None:
+        return "None", "Unavailable"
+    interface = _project_interface(project)
+    project_name = interface.get("name") if isinstance(interface.get("name"), str) else project.name
+    config = _project_config(project)
+    tasks = config.get("task") if config else None
+    queue_size = len(tasks) if isinstance(tasks, list) else 0
+    return project_name, f"{queue_size} task{'s' if queue_size != 1 else ''}"
+
+
+def _control_panel_html(window) -> str:
+    groups = "".join(
+        f"<h2>{html.escape(group)}</h2>"
+        '<div class="actions">'
+        + "".join(
+            f'<a class="action" href="{sublime.command_url("maa_framework_browser_panel_action", {"action": action})}">{html.escape(label)}</a>'
+            for action, label, _command in entries
+        )
+        + "</div>"
+        for group, entries in _CONTROL_PANEL_GROUPS
     )
+    project, queue = _control_panel_summary(window)
+    notice = _control_notices.get(window.id())
+    notice_html = f'<p class="notice">{html.escape(notice)}</p>' if notice else ""
     event_text = html.escape(
         json.dumps(_runtime_manager.history[-50:], ensure_ascii=False, indent=2)
     )
     return f"""
     <body id="maa-framework-panel">
       <style>
-        body {{ padding: 1rem; }}
-        h1 {{ margin: 0 0 0.75rem 0; }}
-        .state {{ font-size: 1.15rem; margin-bottom: 1rem; }}
-        .button {{ display: inline-block; padding: 0.35rem 0.65rem; margin: 0 0.3rem 0.4rem 0; border-radius: 0.25rem; background-color: color(var(--foreground) alpha(0.12)); }}
-        pre {{ padding: 0.75rem; white-space: pre-wrap; background-color: color(var(--foreground) alpha(0.06)); }}
+        body {{ padding: 12px; }}
+        h1 {{ font-size: 1.3rem; margin: 0 0 10px 0; }}
+        h2 {{ font-size: 1rem; margin: 14px 0 6px 0; }}
+        .summary {{ margin: 0 0 10px 0; padding: 8px; border-left: 3px solid var(--accent); background-color: color(var(--foreground) alpha(0.06)); }}
+        .summary-row {{ display: block; line-height: 1.45; }}
+        .notice {{ margin: 8px 0; padding: 8px; border-left: 3px solid var(--accent); background-color: color(var(--foreground) alpha(0.08)); }}
+        .actions {{ display: block; margin: 0 0 10px 0; }}
+        .action {{ display: block; line-height: 1.35; padding: 7px 9px; margin: 0 0 5px 0; border-radius: 3px; background-color: color(var(--foreground) alpha(0.12)); }}
+        pre {{ padding: 8px; white-space: pre-wrap; background-color: color(var(--foreground) alpha(0.06)); }}
       </style>
       <h1>MaaFramework Control</h1>
-      <div class="state">Runtime: <b>{html.escape(_runtime_manager.state)}</b></div>
-      <div>{controls}</div>
+      <div class="summary">
+        <span class="summary-row">Runtime: <b>{html.escape(_runtime_manager.state)}</b></span>
+        <span class="summary-row">Project: <b>{html.escape(project)}</b></span>
+        <span class="summary-row">Queue: <b>{html.escape(queue)}</b></span>
+      </div>
+      {notice_html}
+      {groups}
       <h2>Recent IPC events</h2>
       <pre>{event_text}</pre>
     </body>
@@ -835,15 +960,19 @@ def _log_analysis_html(analysis: dict[str, Any], selected: str) -> str:
 
 
 def _refresh_control_sheets() -> None:
-    content = _control_panel_html()
     stale = []
     for window_id, sheet in _control_sheets.items():
         try:
-            sheet.set_contents(content)
+            window = sheet.window()
+            if window is None:
+                stale.append(window_id)
+                continue
+            sheet.set_contents(_control_panel_html(window))
         except Exception:
             stale.append(window_id)
     for window_id in stale:
         _control_sheets.pop(window_id, None)
+        _control_notices.pop(window_id, None)
 
 
 def _maa_version_key(version: str):
@@ -1835,12 +1964,36 @@ class MaaFrameworkActivateShortcutsCommand(sublime_plugin.WindowCommand):
 
 class MaaFrameworkBrowserPanelCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
-        sheet = self.window.new_html_sheet("MaaFramework Control", _control_panel_html())
+        _control_notices.pop(self.window.id(), None)
+        sheet = self.window.new_html_sheet("MaaFramework Control", _control_panel_html(self.window))
         _control_sheets[self.window.id()] = sheet
+
+
+class MaaFrameworkBrowserPanelActionCommand(sublime_plugin.WindowCommand):
+    def run(self, action: str) -> None:
+        target = _CONTROL_PANEL_ACTIONS.get(action)
+        if target is None:
+            message = "Unknown control panel action."
+            sublime.status_message(f"MaaFramework: {message}")
+            _control_notices[self.window.id()] = message
+            _refresh_control_sheets()
+            return
+        label, command = target
+        reason = _control_panel_block_reason(self.window, action)
+        if reason:
+            sublime.status_message(f"MaaFramework: {reason}")
+            _control_notices[self.window.id()] = reason
+            _refresh_control_sheets()
+            return
+        _control_notices[self.window.id()] = f"{label} selected."
+        _refresh_control_sheets()
+        self.window.run_command(command)
+        sublime.set_timeout(_refresh_control_sheets, 100)
 
 
 class MaaFrameworkBrowserPanelRefreshCommand(sublime_plugin.WindowCommand):
     def run(self) -> None:
+        _control_notices[self.window.id()] = "Panel refreshed."
         _refresh_control_sheets()
 
 
@@ -1897,6 +2050,8 @@ class MaaFrameworkAddTaskCommand(sublime_plugin.WindowCommand):
             sublime.status_message(f"MaaFramework: cannot add queued task: {error}")
             return
         sublime.status_message(f"MaaFramework: queued task {task['name']}")
+        _control_notices[self.window.id()] = f"Queued task {task['name']}."
+        _refresh_control_sheets()
 
 
 class MaaFrameworkRemoveTaskCommand(sublime_plugin.WindowCommand):
@@ -1938,6 +2093,8 @@ class MaaFrameworkRemoveTaskCommand(sublime_plugin.WindowCommand):
             return
         name = removed.get("name", "<invalid>") if isinstance(removed, dict) else "<invalid>"
         sublime.status_message(f"MaaFramework: removed queued task {name}")
+        _control_notices[self.window.id()] = f"Removed queued task {name}."
+        _refresh_control_sheets()
 
 
 class MaaFrameworkGotoTaskCommand(sublime_plugin.WindowCommand):

@@ -1,4 +1,5 @@
 import importlib.util
+import html
 import json
 import sys
 import tempfile
@@ -73,6 +74,12 @@ class FakeRuntimeManager:
         self.shutdown_count = 0
         self.state = "idle"
         self.history = []
+        self.running = False
+        self.latest_recognition = None
+        self.latest_action = None
+
+    def is_running(self):
+        return self.running
 
     def start(self, project, window):
         self.started = (project, window)
@@ -200,12 +207,16 @@ class FakeView:
 
 
 class FakeHtmlSheet:
-    def __init__(self, name, content):
+    def __init__(self, window, name, content):
+        self._window = window
         self.name = name
         self.content = content
 
     def set_contents(self, content):
         self.content = content
+
+    def window(self):
+        return self._window
 
 
 class FakeQuickPanelItem:
@@ -262,7 +273,7 @@ class FakeWindow:
         return self._id
 
     def new_html_sheet(self, name, content):
-        self.html_sheet = FakeHtmlSheet(name, content)
+        self.html_sheet = FakeHtmlSheet(self, name, content)
         return self.html_sheet
 
 
@@ -275,6 +286,7 @@ class FakeSublime(types.ModuleType):
         self.messages = []
         self.clipboard = None
         self.QuickPanelItem = FakeQuickPanelItem
+        self.command_urls = []
 
     def load_settings(self, _name):
         return self.settings
@@ -307,7 +319,9 @@ class FakeSublime(types.ModuleType):
         self.clipboard = value
 
     def command_url(self, command, _args=None):
-        return f"subl:{command}"
+        self.command_urls.append((command, _args))
+        formatted = command if _args is None else f"{command} {json.dumps(_args)}"
+        return f"subl:{html.escape(formatted, quote=True)}"
 
 
 class PluginTests(unittest.TestCase):
@@ -940,20 +954,57 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(target.ran_command, ("maa_framework_screenshot", None))
 
     def test_opens_browser_execution_panel_with_sublime_ipc_links(self):
-        window = FakeWindow([self.temp.name])
+        project = Path(self.temp.name, "workspace", "demo")
+        pipeline = project / "resource" / "pipeline" / "main.json"
+        pipeline.parent.mkdir(parents=True)
+        pipeline.write_text('{"Entry":{}}', encoding="utf-8")
+        (project / "interface.json").write_text(
+            '{"name":"Demo","resource":[{"name":"Default","path":"resource"}]}',
+            encoding="utf-8",
+        )
+        config = project / "config" / "maa_pi_config.json"
+        config.parent.mkdir()
+        config.write_text('{"task":[{"name":"Daily"}]}', encoding="utf-8")
+        window = FakeWindow([str(project.parent)])
+        window._views.append(FakeView(str(pipeline), window))
         runtime = FakeRuntimeManager()
         runtime.state = "running"
+        runtime.running = True
         self.plugin._runtime_manager = runtime
         self.plugin._control_sheets.clear()
+        self.sublime.command_urls.clear()
 
         self.plugin.MaaFrameworkBrowserPanelCommand(window).run()
 
         self.assertEqual(window.html_sheet.name, "MaaFramework Control")
         self.assertIn("Runtime: <b>running</b>", window.html_sheet.content)
-        self.assertIn('href="subl:maa_framework_start"', window.html_sheet.content)
-        self.assertIn('href="subl:maa_framework_stop"', window.html_sheet.content)
-        self.assertIn('href="subl:maa_framework_test_ocr"', window.html_sheet.content)
+        self.assertIn("Project: <b>Demo</b>", window.html_sheet.content)
+        self.assertIn("Queue: <b>1 task</b>", window.html_sheet.content)
+        self.assertIn(".action { display: block;", window.html_sheet.content)
+        self.assertIn('href="subl:maa_framework_browser_panel_action ', window.html_sheet.content)
+        self.assertNotIn("&amp;quot;", window.html_sheet.content)
+        self.assertEqual(
+            {args["action"] for command, args in self.sublime.command_urls if args},
+            set(self.plugin._CONTROL_PANEL_ACTIONS),
+        )
         self.assertIs(self.plugin._control_sheets[window.id()], window.html_sheet)
+
+        action = self.plugin.MaaFrameworkBrowserPanelActionCommand(window)
+        action.run("pause")
+        self.assertEqual(window.ran_command, ("maa_framework_pause", None))
+        self.assertIn("Pause selected.", window.html_sheet.content)
+
+        runtime.running = False
+        runtime.state = "idle"
+        window.ran_command = None
+        action.run("screenshot")
+        self.assertIsNone(window.ran_command)
+        self.assertIn("runtime is not ready", window.html_sheet.content)
+
+        config.write_text('{"task":[]}', encoding="utf-8")
+        action.run("start")
+        self.assertIsNone(window.ran_command)
+        self.assertIn("task queue is empty", window.html_sheet.content)
 
     def test_analyzes_maa_log_levels_and_events_in_html_sheet(self):
         project = Path(self.temp.name, "workspace", "demo")
