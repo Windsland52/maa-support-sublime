@@ -1,0 +1,23 @@
+[
+  // Optional examples: copy the bindings you want into Preferences > Key Bindings.
+  // {
+  //   "keys": ["ctrl+alt+shift+f5"],
+  //   "command": "maa_framework_shortcut_start",
+  //   "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
+  // },
+  // {
+  //   "keys": ["ctrl+alt+shift+f6"],
+  //   "command": "maa_framework_shortcut_toggle_pause",
+  //   "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
+  // },
+  // {
+  //   "keys": ["ctrl+alt+shift+f7"],
+  //   "command": "maa_framework_shortcut_stop",
+  //   "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
+  // },
+  // {
+  //   "keys": ["ctrl+alt+shift+f8"],
+  //   "command": "maa_framework_shortcut_screenshot",
+  //   "context": [{ "key": "setting.maa_framework_project", "operator": "equal", "operand": true }]
+  // }
+]
