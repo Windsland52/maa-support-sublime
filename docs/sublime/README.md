@@ -19,7 +19,7 @@
 - 独立的 `runtime.mjs` native worker
 - README、LICENSE、第三方声明
 
-构建脚本会拒绝非 `3.8` 的插件宿主声明和仍含第三方裸 import 的 `server.mjs`，并在写包后校验所有必需条目。缺少 `.python-version` 时，Sublime 会回退到 Python 3.3，导致插件无法导入运行于 Python 3.8 的新版 LSP。
+`dependencies.json` 显式声明 `lsp_utils` 与其运行时必需的 `sublime_lib`；不能只依赖前者，因为 `lsp_utils` 的 wheel 不会通过 Python metadata 自动安装后者。构建脚本会拒绝非 `3.8` 的插件宿主声明和仍含第三方裸 import 的 `server.mjs`，并在写包后校验所有必需条目。缺少 `.python-version` 时，Sublime 会回退到 Python 3.3，导致插件无法导入运行于 Python 3.8 的新版 LSP。
 
 ## 运行方式
 

@@ -14,13 +14,9 @@ Users do not need pnpm or a separate maa-lsp checkout. The package selects Subli
 
 ## Installation
 
-The Package Control default-channel submission is tracked in [sublimelsp/repository#169](https://github.com/sublimelsp/repository/pull/169). Until it is merged, add this repository URL with `Package Control: Add Repository`:
+Run `Package Control: Install Package` and select `LSP-MaaFramework`. The package is available from the default channel through the merged [sublimelsp/repository#169](https://github.com/sublimelsp/repository/pull/169) submission.
 
-```text
-https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json
-```
-
-Then run `Package Control: Install Package` and select `LSP-MaaFramework`.
+Package Control installs both required Python libraries, `lsp_utils` and `sublime_lib`. If installation was interrupted and the console reports `No module named 'sublime_lib'`, restore Package Control connectivity and run `Package Control: Satisfy Dependencies`, then restart Sublime Text.
 
 Alternatively, download `LSP-MaaFramework.sublime-package` from [GitHub Releases](https://github.com/Windsland52/maa-support-sublime/releases), place it in Sublime's sibling `Installed Packages` directory, and restart Sublime Text.
 
@@ -78,13 +74,9 @@ Sublime Text LSP 插件，通过社区 [LSP](https://github.com/sublimelsp/LSP) 
 
 ### Package Control
 
-本包属于 LSP helper，已按 Package Control 官方规则向 `sublimelsp/repository` 提交[默认 channel 收录 PR](https://github.com/sublimelsp/repository/pull/169)，机器人检查全部通过。PR 合并前可以先添加本项目的软件源：
+本包已通过[默认 channel 收录 PR](https://github.com/sublimelsp/repository/pull/169)进入 Package Control。直接执行 `Package Control: Install Package` 并搜索 `LSP-MaaFramework`。
 
-1. 执行 `Package Control: Add Repository`；
-2. 输入 `https://raw.githubusercontent.com/Windsland52/maa-support-sublime/main/repository.json`；
-3. 执行 `Package Control: Install Package` 并选择 `LSP-MaaFramework`。
-
-默认 channel 收录后将不再需要第 1、2 步，直接执行 `Package Control: Install Package` 并搜索 `LSP-MaaFramework`。
+Package Control 会同时安装必需的 `lsp_utils` 和 `sublime_lib` Python library。若安装中断且 Console 报告 `No module named 'sublime_lib'`，请先恢复 Package Control 网络连接，再执行 `Package Control: Satisfy Dependencies` 并重启 Sublime Text。
 
 从 `MaaLSP` 0.1.x 升级时，先通过 `Package Control: Remove Package` 删除旧包，再安装 `LSP-MaaFramework`，避免两个 helper 同时启动。
 

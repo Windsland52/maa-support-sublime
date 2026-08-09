@@ -58,3 +58,9 @@ test('Sublime package leaves optional runtime key bindings disabled', async () =
     assert.match(source, new RegExp(`"command": "${command}"`))
   }
 })
+
+test('Sublime package declares every lsp_utils runtime library', async () => {
+  const dependencies = await readJson('../pkgs/sublime/dependencies.json')
+
+  assert.deepEqual(dependencies['*']['*'], ['lsp_utils', 'sublime_lib'])
+})
