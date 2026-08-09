@@ -485,17 +485,22 @@ class PluginTests(unittest.TestCase):
         config_file = project / "config" / "maa_pi_config.json"
         config_file.parent.mkdir()
         config_file.write_text(
-            '{"controller":"Old","task":[{"name":"Keep"}]}',
+            '{"controller":"Adb","resource":"Default","__locale":"English",'
+            '"task":[{"name":"Keep"}]}',
             encoding="utf-8",
         )
         window = FakeWindow([str(workspace)])
 
+        controller = self.plugin.MaaFrameworkSelectControllerCommand(window)
+        controller.run()
+        project_label = str(Path("apps", "demo"))
+        self.assertEqual(window.labels, [f"{project_label} — Adb (selected)"])
+
         resource = self.plugin.MaaFrameworkSelectResourceCommand(window)
         resource.run()
-        project_label = str(Path("apps", "demo"))
         self.assertEqual(
             window.labels,
-            [f"{project_label} — Default", f"{project_label} — Extra"],
+            [f"{project_label} — Default (selected)", f"{project_label} — Extra"],
         )
         window.on_done(1)
 
@@ -503,14 +508,14 @@ class PluginTests(unittest.TestCase):
         locale.run()
         self.assertEqual(
             window.labels,
-            [f"{project_label} — English", f"{project_label} — Chinese"],
+            [f"{project_label} — English (selected)", f"{project_label} — Chinese"],
         )
         window.on_done(1)
 
         config = json.loads(config_file.read_text(encoding="utf-8"))
         self.assertEqual(config["resource"], "Extra")
         self.assertEqual(config["__locale"], "Chinese")
-        self.assertEqual(config["controller"], "Old")
+        self.assertEqual(config["controller"], "Adb")
         self.assertEqual(config["task"], [{"name": "Keep"}])
         self.assertIn("MaaFramework: selected resource Extra", self.sublime.messages)
         self.assertIn("MaaFramework: selected locale Chinese", self.sublime.messages)

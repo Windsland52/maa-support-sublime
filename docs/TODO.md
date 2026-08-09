@@ -59,6 +59,7 @@
 ## Sublime 命令与资源选择
 
 - [x] controller/resource/locale 选择界面
+- [x] 在 controller/resource/locale 列表中标记当前选择
 - [x] 活动项目和资源状态
 - [x] Goto Task
 - [x] task 求值；~~expression 求值~~（仅 MaaAssistantArknights 使用，不在本插件范围）

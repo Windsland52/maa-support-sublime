@@ -1317,13 +1317,16 @@ class _MaaFrameworkSelector:
             workspace = Path(folder)
             for interface_file in _iter_interface_files(workspace):
                 interface = _load_json_object(interface_file) or {}
+                config = _project_config(interface_file.parent) or {}
+                current = config.get(self.config_key)
                 try:
                     project = str(interface_file.parent.relative_to(workspace)) or "."
                 except ValueError:
                     project = str(interface_file.parent)
                 for value in _interface_values(interface, self.interface_field):
                     self._choices.append((interface_file.parent, value))
-                    labels.append(f"{project} — {value}")
+                    selected = " (selected)" if value == current else ""
+                    labels.append(f"{project} — {value}{selected}")
         if not self._choices:
             sublime.status_message(f"MaaFramework: no {self.item_name}s found")
             return
