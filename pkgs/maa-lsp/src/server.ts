@@ -170,6 +170,7 @@ const resolver = new PositionResolver(loader)
 
 let workspaceRoots: string[] = []
 let clientSupportsWorkspaceFolders = false
+let clientSupportsInlayHintRefresh = false
 let projects: ProjectBundle[] = []
 let configWatchers: IContentWatcherController[] = []
 let refreshQueue = Promise.resolve()
@@ -267,6 +268,9 @@ function queueInterfaceSelection(project: ProjectBundle, file: string) {
       await selectConfiguredResource(project)
       connection.console.info(`maa-lsp: reloaded ${path.basename(file)} for ${project.root.dir}`)
       queuePublishDiagnostics()
+      if (clientSupportsInlayHintRefresh) {
+        await connection.languages.inlayHint.refresh()
+      }
     })
     .catch(error => {
       connection.console.error(`maa-lsp: failed to reload ${path.basename(file)}: ${String(error)}`)
@@ -1178,6 +1182,7 @@ async function renameMatchRange(match: RenameMatch): Promise<Range> {
 connection.onInitialize(params => {
   workspaceRoots = workspaceRootsFromInitialize(params)
   clientSupportsWorkspaceFolders = params.capabilities.workspace?.workspaceFolders === true
+  clientSupportsInlayHintRefresh = params.capabilities.workspace?.inlayHint?.refreshSupport === true
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,

@@ -33,6 +33,7 @@
 - [x] 应用 `parser.customReco` / `parser.customAction`
 - [x] 应用 `check.override`
 - [x] 热更新 `config/maa_pi_config.json`
+- [x] 切换 locale 后刷新已打开文件的 Inlay Hint
 - [x] ~~检测 MaaAssistantArknights 模式~~（不在本插件范围）
 - [x] 报告配置加载失败
 - [x] 避免启动时重复发布诊断

@@ -42,6 +42,8 @@ LSP 黑盒测试包含 64 个 pipeline 文件、2048 个任务的大型项目 fi
 
 LSP 直接监听每个 interface 同级的 `config/maa_pi_config.json`。文件新增、修改或删除后只切换该项目的活动 controller/resource 并重新发布诊断，不重扫 workspace，也不需要重启 Sublime。
 
+配置变化后，LSP 还会在客户端支持 `workspace/inlayHint/refresh` 时请求刷新所有已打开文件的 Inlay Hint。切换 `__locale` 后任务引用旁的本地化文本会立即更新，不需要关闭并重新打开文件；controller/resource 变化导致任务文档来源改变时也使用同一刷新路径。
+
 ## 编辑器内容
 
 LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未打开的文档从磁盘读取；文档修改和关闭都会通知 `InterfaceBundle` 刷新。位置换算、诊断、定义跳转和 Hover 使用相同内容来源。

@@ -1025,7 +1025,7 @@ test('completes pipeline tasks and interface references', async () => {
   }
 })
 
-test('provides task documentation and locale inlay hints', async () => {
+test('provides and refreshes task documentation and locale inlay hints', async () => {
   const temp = await mkdtemp(path.join(tmpdir(), 'maa-lsp-inlay-'))
   let client
   try {
@@ -1034,17 +1034,22 @@ test('provides task documentation and locale inlay hints', async () => {
     const workspace = path.join(temp, 'workspace')
     const pipelineDir = path.join(workspace, 'resource', 'pipeline')
     const languageDir = path.join(workspace, 'lang')
+    const configDir = path.join(workspace, 'config')
+    const configFile = path.join(configDir, 'maa_pi_config.json')
     const pipelineFile = path.join(pipelineDir, 'tasks.json')
     await mkdir(pipelineDir, { recursive: true })
     await mkdir(languageDir, { recursive: true })
+    await mkdir(configDir, { recursive: true })
     await writeFile(
       path.join(workspace, 'interface.json'),
       JSON.stringify({
         resource: [{ name: 'Default', path: 'resource' }],
-        languages: { English: 'lang/en.json' }
+        languages: { English: 'lang/en.json', Chinese: 'lang/zh.json' }
       })
     )
     await writeFile(path.join(languageDir, 'en.json'), JSON.stringify({ greeting: 'Hello' }))
+    await writeFile(path.join(languageDir, 'zh.json'), JSON.stringify({ greeting: '你好' }))
+    await writeFile(configFile, JSON.stringify({ resource: 'Default', __locale: 'English' }))
     const pipelineText = JSON.stringify(
       {
         DocumentedTask: { doc: 'Helpful task' },
@@ -1062,7 +1067,7 @@ test('provides task documentation and locale inlay hints', async () => {
     await client.request('initialize', {
       processId: process.pid,
       rootUri: pathToFileURL(workspace).href,
-      capabilities: {},
+      capabilities: { workspace: { inlayHint: { refreshSupport: true } } },
       workspaceFolders: null
     })
     client.send({ jsonrpc: '2.0', method: 'initialized', params: {} })
@@ -1080,6 +1085,21 @@ test('provides task documentation and locale inlay hints', async () => {
       }
     })
     assert.deepEqual(hints.result.map(hint => hint.label).sort(), ['Hello', 'Helpful task'])
+
+    await writeFile(configFile, JSON.stringify({ resource: 'Default', __locale: 'Chinese' }))
+    const refresh = await client.waitFor(
+      message => message.method === 'workspace/inlayHint/refresh'
+    )
+    client.send({ jsonrpc: '2.0', id: refresh.id, result: null })
+    const refreshedHints = await client.request('textDocument/inlayHint', {
+      textDocument: { uri: pathToFileURL(pipelineFile).href },
+      range: {
+        start: { line: 0, character: 0 },
+        end: { line: lines.length - 1, character: lines.at(-1).length }
+      }
+    })
+    assert.deepEqual(refreshedHints.result.map(hint => hint.label).sort(), ['Helpful task', '你好'])
+
     const localeHover = await client.request('textDocument/hover', {
       textDocument: { uri: pathToFileURL(pipelineFile).href },
       position: positionAtOffset(pipelineText, pipelineText.indexOf('greeting') + 1)
