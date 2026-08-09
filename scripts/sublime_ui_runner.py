@@ -53,7 +53,7 @@ def _finish(checks: dict[str, object], error: str | None = None) -> None:
     sublime.set_timeout(lambda: sublime.run_command("exit"), 300)
 
 
-def _check_environment(window, checks: dict[str, object]) -> None:
+def _check_environment(window, view, checks: dict[str, object]) -> None:
     try:
         report = next(
             (
@@ -71,6 +71,7 @@ def _check_environment(window, checks: dict[str, object]) -> None:
         else:
             checks["environment_passed"] = False
             checks["environment_found_interface"] = False
+        checks["code_lens_rendered"] = _code_lens_renders(view)
         _finish(checks)
     except Exception:
         _finish(checks, traceback.format_exc())
@@ -100,7 +101,7 @@ def _check_sheets(window, view, control_created: bool) -> None:
             ],
         }
         window.run_command("maa_framework_check_environment")
-        sublime.set_timeout(lambda: _check_environment(window, checks), 1200)
+        sublime.set_timeout(lambda: _check_environment(window, view, checks), 1200)
     except Exception:
         _finish({}, traceback.format_exc())
 
@@ -120,6 +121,19 @@ def _exercise_commands(window, view) -> None:
         sublime.set_timeout(lambda: _open_log_analysis(window, view), 600)
     except Exception:
         _finish({}, traceback.format_exc())
+
+
+def _wait_for_code_lens(window, view, code_lens_attempt: int = 0) -> None:
+    window.focus_view(view)
+    if _code_lens_renders(view):
+        _exercise_commands(window, view)
+    elif code_lens_attempt < 40:
+        sublime.set_timeout(lambda: _wait_for_code_lens(window, view, code_lens_attempt + 1), 250)
+    else:
+        _finish(
+            {"code_lens_rendered": False},
+            "timed out waiting for a visible Code Lens annotation",
+        )
 
 
 def _wait_for_plugin() -> None:
@@ -143,7 +157,7 @@ def _wait_for_plugin() -> None:
         and attempt >= 4
     )
     if ready:
-        _exercise_commands(window, view)
+        _wait_for_code_lens(window, view)
     elif attempt < 40:
         sublime.set_timeout(_wait_for_plugin, 500)
     else:
