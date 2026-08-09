@@ -1,0 +1,130 @@
+[
+  {
+    "caption": "Preferences: LSP-MaaFramework Settings",
+    "command": "edit_settings",
+    "args": {
+      "base_file": "${packages}/LSP-MaaFramework/LSP-MaaFramework.sublime-settings",
+      "default": "// Settings in here override those in \"LSP-MaaFramework/LSP-MaaFramework.sublime-settings\"\n\n{\n\t$0\n}\n"
+    }
+  },
+  {
+    "caption": "MaaFramework: Select Controller",
+    "command": "maa_framework_select_controller"
+  },
+  {
+    "caption": "MaaFramework: Control Panel",
+    "command": "maa_framework_control_panel"
+  },
+  {
+    "caption": "MaaFramework: Start Queue",
+    "command": "maa_framework_start"
+  },
+  {
+    "caption": "MaaFramework: Pause Runtime",
+    "command": "maa_framework_pause"
+  },
+  {
+    "caption": "MaaFramework: Continue Runtime",
+    "command": "maa_framework_continue"
+  },
+  {
+    "caption": "MaaFramework: Stop Runtime",
+    "command": "maa_framework_stop"
+  },
+  {
+    "caption": "MaaFramework: Stop Agent Processes",
+    "command": "maa_framework_stop_agents"
+  },
+  {
+    "caption": "MaaFramework: Show Runtime Status",
+    "command": "maa_framework_runtime_status"
+  },
+  {
+    "caption": "MaaFramework: Show Latest Recognition / Action Detail",
+    "command": "maa_framework_runtime_detail"
+  },
+  {
+    "caption": "MaaFramework: Manage Task Breakpoints",
+    "command": "maa_framework_breakpoints"
+  },
+  {
+    "caption": "MaaFramework: Select MaaFramework Version",
+    "command": "maa_framework_select_version"
+  },
+  {
+    "caption": "MaaFramework: Select npm Registry",
+    "command": "maa_framework_select_registry"
+  },
+  {
+    "caption": "MaaFramework: Toggle Administrator Mode",
+    "command": "maa_framework_toggle_admin"
+  },
+  {
+    "caption": "MaaFramework: Toggle Native Debug Mode",
+    "command": "maa_framework_toggle_debug"
+  },
+  {
+    "caption": "MaaFramework: Toggle Recognition Drawing",
+    "command": "maa_framework_toggle_save_draw"
+  },
+  {
+    "caption": "MaaFramework: Activate Global Shortcut Target",
+    "command": "maa_framework_activate_shortcuts"
+  },
+  {
+    "caption": "MaaFramework: Open Browser Execution Panel",
+    "command": "maa_framework_browser_panel"
+  },
+  {
+    "caption": "MaaFramework: Capture Screenshot",
+    "command": "maa_framework_screenshot"
+  },
+  {
+    "caption": "MaaFramework: Crop Screenshot",
+    "command": "maa_framework_crop_screenshot"
+  },
+  {
+    "caption": "MaaFramework: Test OCR",
+    "command": "maa_framework_test_ocr"
+  },
+  {
+    "caption": "MaaFramework: Test Template Match",
+    "command": "maa_framework_test_template_match"
+  },
+  {
+    "caption": "MaaFramework: Test Pipeline Recognition",
+    "command": "maa_framework_test_pipeline_recognition"
+  },
+  {
+    "caption": "MaaFramework: Analyze Logs",
+    "command": "maa_framework_analyze_logs"
+  },
+  {
+    "caption": "MaaFramework: MaaLogAnalyzer",
+    "command": "maa_framework_maa_log_analyzer"
+  },
+  {
+    "caption": "MaaFramework: Select Resource",
+    "command": "maa_framework_select_resource"
+  },
+  {
+    "caption": "MaaFramework: Select Locale",
+    "command": "maa_framework_select_locale"
+  },
+  {
+    "caption": "MaaFramework: Goto Task",
+    "command": "maa_framework_goto_task"
+  },
+  {
+    "caption": "MaaFramework: Evaluate Task",
+    "command": "maa_framework_evaluate_task"
+  },
+  {
+    "caption": "MaaFramework: Reload Projects and Config",
+    "command": "maa_framework_reload"
+  },
+  {
+    "caption": "MaaFramework: Check Environment",
+    "command": "maa_framework_check_environment"
+  }
+]
