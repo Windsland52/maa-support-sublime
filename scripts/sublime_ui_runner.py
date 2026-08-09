@@ -34,6 +34,13 @@ def _hover_image_renders(view) -> bool:
     return "![](data:image/png;base64," in value and "data:image/png;base64," in rendered
 
 
+def _code_lens_renders(view) -> bool:
+    plugin = sys.modules.get("LSP-MaaFramework.plugin")
+    plugin_class = getattr(plugin, "LspMaaFrameworkPlugin", None)
+    session_name = getattr(plugin_class, "name", None)
+    return isinstance(session_name, str) and bool(view.get_regions(f"lsp_code_lens.{session_name}"))
+
+
 def _finish(checks: dict[str, object], error: str | None = None) -> None:
     payload = {
         "passed": error is None and all(bool(value) for value in checks.values()),
@@ -82,6 +89,7 @@ def _check_sheets(window, view, control_created: bool) -> None:
             "control_html_sheet": control_created,
             "log_analysis_html_sheet": html_sheet_count >= 2,
             "hover_image_preview": _hover_image_renders(view),
+            "code_lens_rendered": _code_lens_renders(view),
             "registered_maa_commands": [
                 command.__name__
                 for command in sublime_plugin.window_command_classes

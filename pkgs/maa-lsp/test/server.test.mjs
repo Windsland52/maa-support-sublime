@@ -191,7 +191,10 @@ test('standalone server discovers recursive projects in every workspace', async 
     assert.equal(initialized.result.capabilities.referencesProvider, true)
     assert.deepEqual(initialized.result.capabilities.renameProvider, { prepareProvider: true })
     assert.equal(initialized.result.capabilities.workspaceSymbolProvider, true)
-    assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: false })
+    assert.deepEqual(initialized.result.capabilities.codeLensProvider, { resolveProvider: true })
+    assert.deepEqual(initialized.result.capabilities.executeCommandProvider, {
+      commands: ['editor.action.showReferences']
+    })
     assert.deepEqual(initialized.result.capabilities.codeActionProvider.codeActionKinds, [
       'quickfix',
       'refactor.rewrite'
@@ -971,18 +974,23 @@ test('completes pipeline tasks and interface references', async () => {
     const pipelineLenses = await client.request('textDocument/codeLens', {
       textDocument: { uri: pathToFileURL(pipelineFile).href }
     })
-    assert.deepEqual(pipelineLenses.result.map(lens => lens.command.title).sort(), [
-      '0 references',
-      '0 references',
-      '2 references'
-    ])
+    assert.equal(pipelineLenses.result.length, 3)
+    assert.ok(pipelineLenses.result.every(lens => lens.command === undefined))
+    const existingTaskLens = pipelineLenses.result.find(lens => lens.data.task === 'ExistingTask')
+    const resolvedTaskLens = await client.request('codeLens/resolve', existingTaskLens)
+    assert.equal(resolvedTaskLens.result.command.title, '2 references')
+    assert.equal(resolvedTaskLens.result.command.command, 'editor.action.showReferences')
+    assert.equal(resolvedTaskLens.result.command.arguments[2].length, 2)
     const interfaceLenses = await client.request('textDocument/codeLens', {
       textDocument: { uri: pathToFileURL(interfaceFile).href }
     })
-    assert.deepEqual(
-      interfaceLenses.result.map(lens => lens.command.title),
-      ['Active resource']
+    assert.equal(interfaceLenses.result.length, 1)
+    const resolvedInterfaceLens = await client.request(
+      'codeLens/resolve',
+      interfaceLenses.result[0]
     )
+    assert.equal(resolvedInterfaceLens.result.command.title, 'Active resource')
+    assert.equal(resolvedInterfaceLens.result.command.command, 'editor.action.showReferences')
 
     const taskPosition = positionAtOffset(pipelineText, pipelineText.indexOf('ExistingTask') + 1)
     const taskActions = await client.request('textDocument/codeAction', {

@@ -43,6 +43,7 @@
 - [x] References
 - [x] Workspace Symbol
 - [x] Code Lens
+- [x] 修复 Sublime 过滤空命令导致 Code Lens 不显示
 - [x] Inlay Hint
 - [x] Code Action
 - [x] Document Link

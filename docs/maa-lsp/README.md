@@ -53,7 +53,7 @@ LSP 使用增量文本同步。打开的文档从客户端缓冲区读取，未�
 - Definition
 - References（pipeline 与 interface 声明/引用）
 - Workspace Symbol（跨项目任务名搜索）
-- Code Lens（任务引用数与活动资源状态）
+- Code Lens（任务引用数与活动资源状态；按可见范围延迟解析，任务引用数可点击打开引用列表）
 - Inlay Hint（任务文档与当前 locale 文本）
 - Code Action（任务 v1/v2 语法互转与图片路径 quick-fix）
 - Document Link（interface 路径、模板图片与本地文档）

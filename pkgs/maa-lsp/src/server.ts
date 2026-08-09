@@ -53,6 +53,20 @@ import { MAATOOLS_CONFIG_FILE, type MaaToolsConfig, loadMaaToolsConfig } from '.
 import { LspContentLoader, LspContentWatcher } from './content'
 import { type ResourceRoot, isInterfaceFile, locateResourceRoots } from './workspace'
 
+const SHOW_REFERENCES_COMMAND = 'editor.action.showReferences'
+
+type MaaCodeLensData =
+  | {
+      kind: 'resource'
+      resource: string
+      uri: string
+    }
+  | {
+      kind: 'task'
+      task: string
+      uri: string
+    }
+
 function debounce<A extends unknown[]>(fn: (...args: A) => void, ms: number): (...args: A) => void {
   let timer: NodeJS.Timeout | undefined
   return (...args: A) => {
@@ -1170,7 +1184,7 @@ connection.onInitialize(params => {
       completionProvider: {
         triggerCharacters: ['"', '[', ']', '$']
       },
-      codeLensProvider: { resolveProvider: false },
+      codeLensProvider: { resolveProvider: true },
       codeActionProvider: {
         codeActionKinds: [CodeActionKind.QuickFix, CodeActionKind.RefactorRewrite]
       },
@@ -1179,6 +1193,7 @@ connection.onInitialize(params => {
       documentLinkProvider: { resolveProvider: false },
       documentFormattingProvider: true,
       documentSymbolProvider: true,
+      executeCommandProvider: { commands: [SHOW_REFERENCES_COMMAND] },
       hoverProvider: true,
       inlayHintProvider: true,
       referencesProvider: true,
@@ -1408,13 +1423,6 @@ connection.onCodeLens(async params => {
     const lenses = []
     const [layer, fileName, isDefault] = layerInfo
     if (!isDefault) {
-      const referenceCounts = new Map<string, number>()
-      for (const ref of project.bundle.topLayer.mergedAllRefs) {
-        const task = extractTaskRef(ref)
-        if (task) {
-          referenceCounts.set(task, (referenceCounts.get(task) ?? 0) + 1)
-        }
-      }
       for (const [task, taskInfos] of Object.entries(layer.tasks)) {
         for (const taskInfo of taskInfos) {
           if (taskInfo.file !== fileName) {
@@ -1425,13 +1433,9 @@ connection.onCodeLens(async params => {
             taskInfo.prop.offset,
             taskInfo.prop.length
           )
-          const count = referenceCounts.get(task) ?? 0
           lenses.push({
             range: location.range,
-            command: {
-              title: `${count} reference${count === 1 ? '' : 's'}`,
-              command: ''
-            }
+            data: { kind: 'task', task, uri: params.textDocument.uri } satisfies MaaCodeLensData
           })
         }
       }
@@ -1442,19 +1446,68 @@ connection.onCodeLens(async params => {
         continue
       }
       const location = await toLocation(decl.file, decl.location.offset, decl.location.length)
-      const active = decl.name === project.bundle.activeResource
       lenses.push({
         range: location.range,
-        command: {
-          title: active ? 'Active resource' : `Resource: ${decl.name}`,
-          command: ''
-        }
+        data: {
+          kind: 'resource',
+          resource: decl.name,
+          uri: params.textDocument.uri
+        } satisfies MaaCodeLensData
       })
     }
     return lenses
   }
   return null
 })
+
+connection.onCodeLensResolve(async lens => {
+  const data = lens.data as Partial<MaaCodeLensData> | undefined
+  if (!data || typeof data.uri !== 'string' || (data.kind !== 'task' && data.kind !== 'resource')) {
+    return lens
+  }
+  const file = URI.parse(data.uri).fsPath as AbsolutePath
+  for (const project of projects) {
+    await project.bundle.flush(true)
+    if (!project.bundle.locateLayer(file)) {
+      continue
+    }
+
+    let title: string
+    let matches: Array<{ file: string; location: { offset: number; length: number } }>
+    if (data.kind === 'task' && typeof data.task === 'string') {
+      matches = project.bundle.topLayer.mergedAllRefs.filter(
+        ref => extractTaskRef(ref) === data.task
+      )
+      title = `${matches.length} reference${matches.length === 1 ? '' : 's'}`
+    } else if (data.kind === 'resource' && typeof data.resource === 'string') {
+      const decl = project.bundle.info.decls.find(
+        candidate => candidate.type === 'interface.resource' && candidate.name === data.resource
+      )
+      matches = decl ? makeInterfaceRefs(project.bundle.info, decl, null) : []
+      title =
+        data.resource === project.bundle.activeResource
+          ? 'Active resource'
+          : `Resource: ${data.resource}`
+    } else {
+      return lens
+    }
+
+    const references = await Promise.all(
+      matches.map(match => toLocation(match.file, match.location.offset, match.location.length))
+    )
+    return {
+      ...lens,
+      command: {
+        title,
+        command: SHOW_REFERENCES_COMMAND,
+        arguments: [data.uri, lens.range.start, references]
+      }
+    }
+  }
+  return lens
+})
+
+connection.onExecuteCommand(() => null)
 
 connection.languages.inlayHint.on(async params => {
   resolver.reset()

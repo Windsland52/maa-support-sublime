@@ -54,6 +54,8 @@ maa-lsp 的图片 Hover 同时返回可点击的本地文件链接和 Markdown �
 
 `MaaFramework: Check Environment` 在异步线程检查 Sublime Text 4、LSP 包、可执行的 Node `>=20.19.0`、内置 server、workspace 中的 interface 数量，以及 interface / `maa_pi_config.json` 语法。结果写入只读临时报告，以 `[OK]`、`[WARN]`、`[FAIL]` 和最终 PASS/FAIL 标识，便于复制到 issue。
 
+maa-lsp 的 Code Lens 使用 `codeLens/resolve` 按可见范围延迟解析。Sublime LSP 会过滤没有可执行命令的 Lens，因此任务引用数和 interface 活动 resource 状态都使用其支持的 `editor.action.showReferences` 命令；引用数可点击打开真实引用位置，且不会在打开大型 pipeline 时把全项目引用一次性塞入响应。
+
 ## 控制面板与任务队列
 
 `MaaFramework: Control Panel` 展示活动项目的持久化任务队列。`Add Task to Queue…` 从 interface 的 `task` 定义中选择，并向 `config/maa_pi_config.json.task` 追加带稳定 `__key` 的队列项；`Remove Task from Queue…` 删除指定实例。队列允许重复任务并保留现有任务的 `option` 等字段。选择已有队列项会跳转到它的 pipeline entry 声明。
@@ -128,7 +130,7 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 - 根目录 Python 开发环境由 uv 管理；`.python-version` 选择 Python 3.13，`uv.lock` 锁定 Ruff 与 `st-package-reviewer`。CI/Release 使用 `astral-sh/setup-uv` 和 `uv run --frozen`，不执行裸 `pip install`；安装包内 `.python-version` 仍是 Sublime plugin host 所需的 3.8；
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试、安装包构建和 package-only tag 的无推送校验；普通 branch/PR 可执行该校验，只有 `v*` release job 真正推送 tag 时才要求 Git ref 与包版本一致；
-- `pnpm test:sublime-ui` 将 Sublime Text 安装目录复制为临时 portable 实例，复用真实 LSP/lsp_utils 依赖，安装本次生成的 `.sublime-package`，并由 Python 3.8 plugin host 自动打开 fixture。测试验证 Maa 项目标记、状态栏、本地图片 Hover 的 data URI/minihtml 渲染、控制 minihtml sheet、日志分析 sheet 和环境 PASS 报告，随后退出实例并清理临时目录；它不会读写用户的 Packages/Installed Packages；
+- `pnpm test:sublime-ui` 将 Sublime Text 安装目录复制为临时 portable 实例，复用真实 LSP/lsp_utils 依赖，安装本次生成的 `.sublime-package`，并由 Python 3.8 plugin host 自动打开 fixture。测试验证 Maa 项目标记、状态栏、本地图片 Hover 的 data URI/minihtml 渲染、Code Lens 注解、控制 minihtml sheet、日志分析 sheet 和环境 PASS 报告，随后退出实例并清理临时目录；它不会读写用户的 Packages/Installed Packages；
 - CI 解压最终安装包并使用官方 `st-package-reviewer --fail-on-warnings` 审核，warning 或 failure 均阻止合并；
 - 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `LSP-MaaFramework.sublime-package`；随后把同一安装包展开为独立 Git commit，发布对应的 `sublime-v*` package-only tag；
 - `sublime-v*` tag 根目录只包含安装包文件，其中 `.python-version` 为 3.8，并包含构建后的 `server.mjs` / `runtime.mjs`。它与 main 的 monorepo tag 隔离，因此 Package Control 可以直接安装 tag archive；
