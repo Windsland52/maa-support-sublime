@@ -21,6 +21,7 @@ from LSP.plugin import OnPreStartContext
 from LSP.plugin import PluginStartError
 from LSP.plugin import Request
 from LSP.plugin import filename_to_uri
+from LSP.plugin import parse_uri
 from lsp_utils import NodeManager
 
 SETTINGS_FILE = "LSP-MaaFramework.sublime-settings"
@@ -51,6 +52,8 @@ IGNORED_DIRECTORIES = {"node_modules", "MaaUtils", "MaaDeps"}
 STATUS_KEY = "maa_framework_project"
 LOG_TAIL_LIMIT = 8 * 1024 * 1024
 MAA_LOG_ANALYZER_URL = "https://mla.maafw.com"
+HOVER_IMAGE_BUDGET = 4 * 1024 * 1024
+HOVER_FILE_IMAGE_PATTERN = re.compile(r"(!\[\]\()(?P<uri>file:[^)]+)(\))")
 _known_maa_workspaces: set[Path] = set()
 _effective_settings_by_window: dict[int, dict[str, Any]] = {}
 
@@ -83,6 +86,43 @@ def _set_user_setting(window, name: str, value: Any) -> None:
             **_settings_for_window(window),
             name: value,
         }
+
+
+def _embed_hover_images(result: Any) -> None:
+    if not isinstance(result, dict):
+        return
+    contents = result.get("contents")
+    if not isinstance(contents, dict) or contents.get("kind") != "markdown":
+        return
+    value = contents.get("value")
+    if not isinstance(value, str):
+        return
+
+    remaining = HOVER_IMAGE_BUDGET
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal remaining
+        uri = match.group("uri")
+        scheme, file_name = parse_uri(uri)
+        if scheme != "file":
+            return match.group(0)
+        file = Path(file_name)
+        if file.suffix.lower() != ".png":
+            return match.group(0)
+        try:
+            size = file.stat().st_size
+            if size <= 0 or size > remaining:
+                return match.group(0)
+            image = file.read_bytes()
+        except OSError:
+            return match.group(0)
+        if not image.startswith(b"\x89PNG\r\n\x1a\n"):
+            return match.group(0)
+        remaining -= len(image)
+        encoded = base64.b64encode(image).decode("ascii")
+        return f"{match.group(1)}data:image/png;base64,{encoded}{match.group(3)}"
+
+    contents["value"] = HOVER_FILE_IMAGE_PATTERN.sub(replace, value)
 
 
 class MaaRuntimeManager:
@@ -2054,6 +2094,10 @@ class LspMaaFrameworkPlugin(LspPlugin):
         context.configuration.env.update(node_runner.node_env())
         context.variables["node_bin"] = str(node_runner.node_binary_path())
         context.variables["server_path"] = str(server_path)
+
+    def on_server_response_async(self, response: dict[str, Any]) -> None:
+        if response.get("method") == "textDocument/hover":
+            _embed_hover_images(response.get("result"))
 
     @classmethod
     def _resolve_server_path(cls, settings: dict[str, Any]) -> Path | None:

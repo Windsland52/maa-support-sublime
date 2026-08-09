@@ -38,6 +38,8 @@ Node runtime 通过 `lsp_utils.NodeManager` 解析，要求 `>=20.19.0`。优先
 
 插件在 LSP 静态 JSON selector 之外执行 Maa 项目适用性检查：递归扫描 workspace，按 server 相同规则跳过隐藏目录、`node_modules`、`MaaUtils`、`MaaDeps`，仅发现 `interface.json` / `interface.jsonc` 后启动。无 workspace 时回退检查当前文件的祖先目录。
 
+maa-lsp 的图片 Hover 同时返回可点击的本地文件链接和 Markdown 图片。Sublime minihtml 不直接加载 `file:` 图片，且 LSP 的 `mdpopups.resolve_images` 只解析 HTTP/HTTPS，因此插件在收到 `textDocument/hover` 响应后，将本地 PNG 预览转换为 base64 `data:` URI；原始文件链接保持不变。单次 Hover 最多内嵌 4 MiB，超过预算时仍可使用 `Open Link`，避免大图阻塞编辑器。
+
 ## 项目选择命令
 
 命令面板提供 `MaaFramework: Select Controller`、`Select Resource` 和 `Select Locale`。三个命令扫描所有 workspace folder 内的 interface，规则与 LSP 项目发现一致；quick panel 条目同时显示 interface 相对目录与候选名称。选择后保留 `config/maa_pi_config.json` 的其他字段，原子写入 `controller`、`resource` 或 `__locale`。LSP 对该配置的文件监听会立即应用 controller/resource 变化。
@@ -126,7 +128,7 @@ interface 配置 `agent.child_exec` 时，native worker 展开 `{PROJECT_DIR}`�
 
 - 根目录 Python 开发环境由 uv 管理；`.python-version` 选择 Python 3.13，`uv.lock` 锁定 Ruff 与 `st-package-reviewer`。CI/Release 使用 `astral-sh/setup-uv` 和 `uv run --frozen`，不执行裸 `pip install`；安装包内 `.python-version` 仍是 Sublime plugin host 所需的 3.8；
 - CI 在 Node 24 上执行 lint、LSP 黑盒测试、Python 插件测试、安装包构建和 package-only tag 的无推送校验；普通 branch/PR 可执行该校验，只有 `v*` release job 真正推送 tag 时才要求 Git ref 与包版本一致；
-- `pnpm test:sublime-ui` 将 Sublime Text 安装目录复制为临时 portable 实例，复用真实 LSP/lsp_utils 依赖，安装本次生成的 `.sublime-package`，并由 Python 3.8 plugin host 自动打开 fixture。测试验证 Maa 项目标记、状态栏、控制 minihtml sheet、日志分析 sheet 和环境 PASS 报告，随后退出实例并清理临时目录；它不会读写用户的 Packages/Installed Packages；
+- `pnpm test:sublime-ui` 将 Sublime Text 安装目录复制为临时 portable 实例，复用真实 LSP/lsp_utils 依赖，安装本次生成的 `.sublime-package`，并由 Python 3.8 plugin host 自动打开 fixture。测试验证 Maa 项目标记、状态栏、本地图片 Hover 的 data URI/minihtml 渲染、控制 minihtml sheet、日志分析 sheet 和环境 PASS 报告，随后退出实例并清理临时目录；它不会读写用户的 Packages/Installed Packages；
 - CI 解压最终安装包并使用官方 `st-package-reviewer --fail-on-warnings` 审核，warning 或 failure 均阻止合并；
 - 推送 `v*` tag 时创建或更新 GitHub Release，并上传 `LSP-MaaFramework.sublime-package`；随后把同一安装包展开为独立 Git commit，发布对应的 `sublime-v*` package-only tag；
 - `sublime-v*` tag 根目录只包含安装包文件，其中 `.python-version` 为 3.8，并包含构建后的 `server.mjs` / `runtime.mjs`。它与 main 的 monorepo tag 隔离，因此 Package Control 可以直接安装 tag archive；

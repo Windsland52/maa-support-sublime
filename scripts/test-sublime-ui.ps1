@@ -91,12 +91,14 @@ try {
 '@, $utf8NoBom)
 
     New-Item -ItemType Directory -Path (Join-Path $fixture "resource\pipeline") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $fixture "resource\image") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $fixture "config") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $fixture "debug") -Force | Out-Null
     [IO.File]::WriteAllText((Join-Path $fixture "interface.json"), '{"name":"UI Fixture","controller":[{"name":"ADB","type":"Adb"}],"resource":[{"name":"Default","path":"resource"}],"task":[]}', $utf8NoBom)
     [IO.File]::WriteAllText((Join-Path $fixture "config\maa_pi_config.json"), '{"controller":"ADB","resource":"Default","task":[]}', $utf8NoBom)
     $fixtureFile = Join-Path $fixture "resource\pipeline\main.json"
     [IO.File]::WriteAllText($fixtureFile, '{"Entry":{"recognition":"DirectHit","action":"DoNothing"}}', $utf8NoBom)
+    [IO.File]::WriteAllBytes((Join-Path $fixture "resource\image\preview.png"), [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="))
     [IO.File]::WriteAllText((Join-Path $fixture "debug\maafw.log"), '[2026-08-08 10:00:00.000][INF][Tasker.cpp] [msg=Tasker.Task.Starting] [entry=Entry]', $utf8NoBom)
 
     $projectFile = Join-Path $testRoot "fixture.sublime-project"

@@ -8,11 +8,30 @@ from pathlib import Path
 
 import sublime
 import sublime_plugin
+import mdpopups
 
 
 RESULT = Path(os.environ["MAA_SUBLIME_UI_RESULT"])
 PROJECT = Path(os.environ["MAA_SUBLIME_UI_PROJECT"])
 attempt = 0
+
+
+def _hover_image_renders(view) -> bool:
+    plugin = sys.modules.get("LSP-MaaFramework.plugin")
+    image = PROJECT / "resource/image/preview.png"
+    if plugin is None or not image.is_file():
+        return False
+    uri = image.as_uri()
+    result = {
+        "contents": {
+            "kind": "markdown",
+            "value": f"[preview.png]({uri})\n\n![]({uri})",
+        }
+    }
+    plugin._embed_hover_images(result)
+    value = result["contents"]["value"]
+    rendered = mdpopups.md2html(view, value)
+    return "![](data:image/png;base64," in value and "data:image/png;base64," in rendered
 
 
 def _finish(checks: dict[str, object], error: str | None = None) -> None:
@@ -41,9 +60,7 @@ def _check_environment(window, checks: dict[str, object]) -> None:
         if report is not None:
             content = report.substr(sublime.Region(0, report.size()))
             checks["environment_passed"] = "Result: PASS" in content
-            checks["environment_found_interface"] = (
-                "discovered 1 interface project(s)" in content
-            )
+            checks["environment_found_interface"] = "discovered 1 interface project(s)" in content
         else:
             checks["environment_passed"] = False
             checks["environment_found_interface"] = False
@@ -54,9 +71,7 @@ def _check_environment(window, checks: dict[str, object]) -> None:
 
 def _check_sheets(window, view, control_created: bool) -> None:
     try:
-        html_sheet_count = sum(
-            isinstance(sheet, sublime.HtmlSheet) for sheet in window.sheets()
-        )
+        html_sheet_count = sum(isinstance(sheet, sublime.HtmlSheet) for sheet in window.sheets())
         checks: dict[str, object] = {
             "python_38_host": sys.version_info[:2] == (3, 8),
             "package_resource_loaded": bool(
@@ -66,6 +81,7 @@ def _check_sheets(window, view, control_created: bool) -> None:
             "maa_project_status": bool(view.get_status("maa_framework_project")),
             "control_html_sheet": control_created,
             "log_analysis_html_sheet": html_sheet_count >= 2,
+            "hover_image_preview": _hover_image_renders(view),
             "registered_maa_commands": [
                 command.__name__
                 for command in sublime_plugin.window_command_classes
@@ -83,13 +99,9 @@ def _check_sheets(window, view, control_created: bool) -> None:
 
 def _open_log_analysis(window, view) -> None:
     try:
-        control_created = any(
-            isinstance(sheet, sublime.HtmlSheet) for sheet in window.sheets()
-        )
+        control_created = any(isinstance(sheet, sublime.HtmlSheet) for sheet in window.sheets())
         window.run_command("maa_framework_analyze_logs")
-        sublime.set_timeout(
-            lambda: _check_sheets(window, view, control_created), 1200
-        )
+        sublime.set_timeout(lambda: _check_sheets(window, view, control_created), 1200)
     except Exception:
         _finish({}, traceback.format_exc())
 

@@ -5,6 +5,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 
 
 class FakeSettings:
@@ -316,6 +317,15 @@ class PluginTests(unittest.TestCase):
         lsp_plugin.PluginStartError = RuntimeError
         lsp_plugin.Request = FakeRequest
         lsp_plugin.filename_to_uri = lambda file: Path(file).as_uri()
+
+        def parse_uri(uri):
+            parsed = urlparse(uri)
+            path = unquote(parsed.path)
+            if len(path) >= 3 and path[0] == "/" and path[2] == ":":
+                path = path[1:]
+            return parsed.scheme, path
+
+        lsp_plugin.parse_uri = parse_uri
         lsp_utils = types.ModuleType("lsp_utils")
         lsp_utils.NodeManager = FakeNodeManager
         sublime_plugin = types.ModuleType("sublime_plugin")
@@ -391,6 +401,26 @@ class PluginTests(unittest.TestCase):
             self.plugin._settings_for_window(window)["maa_version"],
             "5.11.0",
         )
+
+    def test_embeds_local_png_in_hover_while_preserving_file_link(self):
+        image = Path(self.temp.name, "image with space.png")
+        image.write_bytes(b"\x89PNG\r\n\x1a\npreview")
+        uri = image.as_uri()
+        result = {
+            "contents": {
+                "kind": "markdown",
+                "value": f"[image.png]({uri})\n\n![]({uri})",
+            }
+        }
+
+        self.plugin.LspMaaFrameworkPlugin().on_server_response_async(
+            {"method": "textDocument/hover", "result": result}
+        )
+
+        value = result["contents"]["value"]
+        self.assertIn(f"[image.png]({uri})", value)
+        self.assertIn("![](data:image/png;base64,", value)
+        self.assertNotIn(f"![]({uri})", value)
 
     def test_only_applies_to_workspaces_with_recursive_interface(self):
         workspace = Path(self.temp.name, "workspace")

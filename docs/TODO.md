@@ -48,6 +48,7 @@
 - [x] Document Link
 - [x] Document Color
 - [x] 完整 Hover
+- [x] 在 Sublime minihtml 中以内嵌 PNG 正常显示本地图片 Hover
 - [x] ~~MaaAssistantArknights 特殊引用、悬停和求值~~（不在本插件范围）
 - [x] Formatting
 - [x] Rename
